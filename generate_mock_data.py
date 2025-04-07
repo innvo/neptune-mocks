@@ -10,6 +10,7 @@ fake = Faker()
 
 # Configuration
 NUM_RECORDS = 2  # Number of records to generate
+NODE_TYPES = ['person']
 
 def generate_name_list(primary_first, primary_last):
     # Start with the primary name
@@ -33,7 +34,7 @@ def generate_name_list(primary_first, primary_last):
 def generate_birth_date_list(primary_birth_date):
     # Start with the primary birth date
     birth_date_list = [{
-        'BIRTH_DATE': primary_birth_date,
+        'BIRTH_DATE': primary_birth_date
     }]
     
     # Generate 1 to 5 additional birth dates
@@ -45,6 +46,7 @@ def generate_birth_date_list(primary_birth_date):
         birth_date_list.append({
             'BIRTH_DATE': additional_date
         })
+    
     return birth_date_list
 
 def create_node_properties():
@@ -70,10 +72,14 @@ def create_node_properties():
 # Generate mock data
 data = {
     'node_id': [str(uuid.uuid4()) for _ in range(NUM_RECORDS)],
-    'node_type': ['PERSON'] * NUM_RECORDS,
-    'node_name': [f'PERSON_{i+1}' for i in range(NUM_RECORDS)],
+    'node_type': ['person'] * NUM_RECORDS,
+    'node_name': [None] * NUM_RECORDS,  # Initialize as None, will be updated
     'node_properties': [create_node_properties() for _ in range(NUM_RECORDS)]
 }
+
+# Update node_name with NAME_FULL from node_properties
+for i in range(NUM_RECORDS):
+    data['node_name'][i] = data['node_properties'][i]['NAME_FULL']
 
 # Create DataFrame
 df = pd.DataFrame(data)
@@ -82,21 +88,21 @@ df = pd.DataFrame(data)
 print("\nGenerated Mock Data:")
 print(df)
 
+# Save to CSV
+df.to_csv('mock_person_data.csv', index=False)
+print("\nData saved to 'mock_person_data.csv'")
+
 # Pretty print node_properties
 print("\nNode Properties (JSON):")
 for i, props in enumerate(df['node_properties']):
     print(f"\nPerson {i+1}:")
     print(json.dumps(props, indent=2))
 
-# Save to CSV
-df.to_csv('mock_person_data.csv', index=False)
-print("\nData saved to 'mock_person_data.csv'")
-
 def generate_node_data():
     # Generate node data
     node_data = {
-        'node_id': [str(uuid.uuid4()) for _ in range(NUM_NODE_RECORDS)],
-        'node_type': [random.choice(NODE_TYPES) for _ in range(NUM_NODE_RECORDS)]
+        'node_id': [str(uuid.uuid4()) for _ in range(NUM_RECORDS)],
+        'node_type': [random.choice(NODE_TYPES) for _ in range(NUM_RECORDS)]
     }
     
     # Create DataFrame
