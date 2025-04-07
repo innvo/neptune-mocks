@@ -5,7 +5,7 @@ import json
 
 # Configuration
 NUM_NODE_RECORDS = 100  # Number of node records to generate
-NODE_TYPES = ['person', 'name', 'address', 'anumber', 'receipt', 'form', 'email']
+NODE_TYPES = ['person', 'name', 'address', 'anumber', 'receipt', 'form', 'email', 'phone']
 
 def generate_node_data():
     # Generate node data
@@ -34,16 +34,7 @@ def update_person_records():
         # Filter for person records
         person_records = node_df[node_df['node_type'] == 'person']
         
-        # Update person records with NAME_FULL from JSON
-        for index, row in person_records.iterrows():
-            if index < len(person_df):
-                # Get the node_properties JSON string
-                node_properties = person_df.iloc[index]['node_properties']
-                # Parse the JSON string
-                props = json.loads(node_properties.replace("'", '"'))
-                # Update node_name with NAME_FULL
-                node_df.at[index, 'node_name'] = props['NAME_FULL']
-        
+       
         # Save updated DataFrame
         node_df.to_csv('node_data.csv', index=False)
         print("\nUpdated node data saved to 'node_data.csv'")
@@ -63,4 +54,13 @@ if __name__ == "__main__":
     if updated_df is not None:
         # Display the updated DataFrame
         print("\nUpdated Node Data:")
-        print(updated_df[updated_df['node_type'] == 'person']) 
+        print(updated_df[updated_df['node_type'] == 'person'])
+
+    # Node Type Statistics
+    print("\nNode Type Statistics:")
+    print("Total number of nodes:", len(node_df))
+    for node_type in NODE_TYPES:
+        count = len(node_df[node_df['node_type'] == node_type])
+        print(f"{node_type}: {count} nodes")
+
+   

@@ -8,8 +8,19 @@ from faker import Faker
 # Initialize Faker
 fake = Faker()
 
-# Configuration
-NUM_RECORDS = 2  # Number of records to generate
+# Read node_data.csv and count person records
+try:
+    node_df = pd.read_csv('node_data.csv')
+    NUM_RECORDS = len(node_df[node_df['node_type'] == 'person'])
+    print(f"\nFound {NUM_RECORDS} person records in node_data.csv")
+except Exception as e:
+    print(f"Error reading node_data.csv: {str(e)}")
+    NUM_RECORDS = 0  # Default to 0 if file not found or error
+
+if NUM_RECORDS == 0:
+    print("No person records found or error reading file. Exiting.")
+    exit()
+
 NODE_TYPES = ['person']
 
 def generate_name_list(primary_first, primary_last):
