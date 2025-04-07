@@ -1,0 +1,95 @@
+import pandas as pd
+import psycopg2
+from psycopg2.extras import execute_values
+from tqdm import tqdm
+import os
+import json
+from dotenv import load_dotenv
+
+def create_tables(cursor):
+    """Create necessary tables if they don't exist"""
+    try:
+        print("Creating tables...")
+        
+        # Drop tables if they exist (optional, comment out if you want to preserve existing data)
+        cursor.execute("DROP TABLE IF EXISTS edges CASCADE")
+        cursor.execute("DROP TABLE IF EXISTS nodes CASCADE")
+        
+        # Create nodes table
+        cursor.execute("""
+            CREATE TABLE nodes (
+                node_id VARCHAR(255) PRIMARY KEY,
+                node_type VARCHAR(255),
+                node_name VARCHAR(255),
+                node_properties JSONB
+            )
+        """)
+        print("Created nodes table")
+        
+        # Create edges table
+        cursor.execute("""
+            CREATE TABLE edges (
+                edge_id VARCHAR(255) PRIMARY KEY,
+                node_id_from VARCHAR(255),
+                node_id_to VARCHAR(255),
+                edge_type VARCHAR(255),
+                FOREIGN KEY (node_id_from) REFERENCES nodes(node_id),
+                FOREIGN KEY (node_id_to) REFERENCES nodes(node_id)
+            )
+        """)
+        print("Created edges table")
+        
+        # Create indexes
+        cursor.execute("CREATE INDEX idx_nodes_type ON nodes(node_type)")
+        cursor.execute("CREATE INDEX idx_edges_type ON edges(edge_type)")
+        cursor.execute("CREATE INDEX idx_edges_from ON edges(node_id_from)")
+        cursor.execute("CREATE INDEX idx_edges_to ON edges(node_id_to)")
+        print("Created indexes")
+        
+        return True
+    except Exception as e:
+        print(f"Error creating tables: {str(e)}")
+        return False
+
+def load_data_to_postgres():
+    try:
+        # Load environment variables
+        load_dotenv()
+        
+        # Database connection parameters
+        db_params = {
+            'dbname': os.getenv('DB_NAME', 'neptune_db'),
+            'user': os.getenv('DB_USER', 'postgres'),
+            'password': os.getenv('DB_PASSWORD', 'postgres'),
+            'host': os.getenv('DB_HOST', 'localhost'),
+            'port': os.getenv('DB_PORT', '5432')
+        }
+        
+        # Connect to PostgreSQL
+        print("Connecting to PostgreSQL database...")
+        conn = psycopg2.connect(**db_params)
+        cursor = conn.cursor()
+        
+        # Create tables
+        if not create_tables(cursor):
+            return False
+        
+        # Commit the transaction
+        conn.commit()
+        
+        # Close the connection
+        cursor.close()
+        conn.close()
+        
+        print("\nTable creation completed successfully!")
+        return True
+        
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        if 'conn' in locals():
+            conn.rollback()
+            conn.close()
+        return False
+
+if __name__ == "__main__":
+    load_data_to_postgres() 
