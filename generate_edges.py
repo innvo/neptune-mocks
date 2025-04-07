@@ -1,6 +1,9 @@
 import pandas as pd
 import uuid
 import random
+from tqdm import tqdm
+import time
+import os
 
 def validate_node_existence(node_df, node_id):
     """Validate that a node exists in the node_data.csv"""
@@ -8,7 +11,10 @@ def validate_node_existence(node_df, node_id):
 
 def generate_person_edges():
     try:
+        start_time = time.time()
+        
         # Read node_data.csv, excluding node_name column
+        print("Reading node data...")
         node_df = pd.read_csv('node_data.csv', usecols=['node_id', 'node_type'])
         
         # Print node type statistics
@@ -32,12 +38,21 @@ def generate_person_edges():
         email_nodes = node_df[node_df['node_type'] == 'email']
         anumber_nodes = node_df[node_df['node_type'] == 'anumber']
         
-        # Initialize edge data
+        # Initialize edge data and counters
         edges = []
         missing_nodes = set()
+        edge_type_counts = {
+            'person_name': 0,
+            'person_address': 0,
+            'person_form': 0,
+            'person_phone': 0,
+            'person_email': 0,
+            'person_anumber': 0
+        }
         
-        # Generate edges for each person
-        for _, person in person_nodes.iterrows():
+        # Generate edges for each person with progress bar
+        print("\nGenerating edges...")
+        for _, person in tqdm(person_nodes.iterrows(), total=len(person_nodes), desc="Processing person nodes"):
             person_id = person['node_id']
             
             # Person to Name edges
@@ -53,6 +68,7 @@ def generate_person_edges():
                             'node_id_to': name_id,
                             'edge_type': 'person_name'
                         })
+                        edge_type_counts['person_name'] += 1
                     else:
                         missing_nodes.add(name_id)
             
@@ -69,6 +85,7 @@ def generate_person_edges():
                             'node_id_to': address_id,
                             'edge_type': 'person_address'
                         })
+                        edge_type_counts['person_address'] += 1
                     else:
                         missing_nodes.add(address_id)
             
@@ -85,6 +102,7 @@ def generate_person_edges():
                             'node_id_to': form_id,
                             'edge_type': 'person_form'
                         })
+                        edge_type_counts['person_form'] += 1
                     else:
                         missing_nodes.add(form_id)
             
@@ -101,6 +119,7 @@ def generate_person_edges():
                             'node_id_to': phone_id,
                             'edge_type': 'person_phone'
                         })
+                        edge_type_counts['person_phone'] += 1
                     else:
                         missing_nodes.add(phone_id)
             
@@ -117,6 +136,7 @@ def generate_person_edges():
                             'node_id_to': email_id,
                             'edge_type': 'person_email'
                         })
+                        edge_type_counts['person_email'] += 1
                     else:
                         missing_nodes.add(email_id)
             
@@ -133,29 +153,41 @@ def generate_person_edges():
                             'node_id_to': anumber_id,
                             'edge_type': 'person_anumber'
                         })
+                        edge_type_counts['person_anumber'] += 1
                     else:
                         missing_nodes.add(anumber_id)
+            
+            # Save progress periodically
+            if len(edges) >= 10000:
+                edge_df = pd.DataFrame(edges)
+                edge_df.to_csv('person_edges.csv', mode='a', header=not os.path.exists('person_edges.csv'), index=False)
+                edges = []  # Clear the list after saving
+        
+        # Save any remaining edges
+        if edges:
+            edge_df = pd.DataFrame(edges)
+            edge_df.to_csv('person_edges.csv', mode='a', header=not os.path.exists('person_edges.csv'), index=False)
+        
+        # Calculate processing time
+        processing_time = time.time() - start_time
         
         # Print warning if any missing nodes were found
         if missing_nodes:
             print(f"\nWarning: Found {len(missing_nodes)} nodes referenced in edges that don't exist in node_data.csv")
             print("These edges were not created to maintain referential integrity.")
         
-        # Create DataFrame
-        edge_df = pd.DataFrame(edges)
-        
-        # Save to CSV
-        edge_df.to_csv('person_edges.csv', index=False)
-        
         # Print detailed edge statistics
         print("\nEdge Generation Statistics:")
-        print(f"Total number of edges generated: {len(edges)}")
+        print(f"Total number of edges generated: {sum(edge_type_counts.values())}")
+        print(f"Processing time: {processing_time:.2f} seconds")
+        print(f"Edges per second: {sum(edge_type_counts.values()) / processing_time:.2f}")
         print("\nEdge Types Distribution:")
-        edge_counts = edge_df['edge_type'].value_counts()
-        for edge_type, count in edge_counts.items():
+        for edge_type, count in edge_type_counts.items():
             print(f"{edge_type}: {count} edges")
         
-        return edge_df
+        # Read the final edge file to get the complete DataFrame
+        final_edge_df = pd.read_csv('person_edges.csv')
+        return final_edge_df
         
     except Exception as e:
         print(f"Error generating edges: {str(e)}")
