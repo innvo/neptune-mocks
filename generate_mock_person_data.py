@@ -37,16 +37,24 @@ def generate_name_list(first_name, last_name):
     return name_list
 
 def generate_birth_date_list(birth_date):
-    """Generate variations of a birth date"""
+    """Generate 1-3 variations of a birth date in mm-dd-yyyy format, including the original date"""
     date_obj = datetime.strptime(birth_date, '%Y-%m-%d')
-    date_list = [
-        birth_date,  # YYYY-MM-DD
-        date_obj.strftime('%m/%d/%Y'),  # MM/DD/YYYY
-        date_obj.strftime('%d-%m-%Y'),  # DD-MM-YYYY
-        date_obj.strftime('%Y%m%d'),  # YYYYMMDD
-        date_obj.strftime('%m%d%Y'),  # MMDDYYYY
-        date_obj.strftime('%d%m%Y')  # DDMMYYYY
+    original_date = date_obj.strftime('%m-%d-%Y')  # Convert original to mm-dd-yyyy
+    
+    # Generate two additional dates by adding/subtracting random days (within 5 days)
+    potential_dates = [
+        (date_obj + timedelta(days=random.randint(1, 5))).strftime('%m-%d-%Y'),
+        (date_obj - timedelta(days=random.randint(1, 5))).strftime('%m-%d-%Y')
     ]
+    
+    # Always include the original date
+    date_list = [original_date]
+    
+    # Randomly add 0-2 more dates
+    num_additional = random.randint(0, 2)
+    if num_additional > 0:
+        date_list.extend(random.sample(potential_dates, num_additional))
+    
     return date_list
 
 def create_node_properties():

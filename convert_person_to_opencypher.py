@@ -30,8 +30,8 @@ def convert_to_opencypher():
                         try:
                             # Parse the date string to ensure it's valid
                             dt = datetime.strptime(value, '%Y-%m-%d')
-                            # Format for Neptune DateTime in yyyy-MM-dd format
-                            node['BIRTH_DATE:DateTime'] = dt.strftime('%Y-%m-%d')
+                            # Format for Neptune DateTime in mm-dd-yyyy format
+                            node['BIRTH_DATE:DateTime'] = dt.strftime('%m-%d-%Y')
                         except ValueError as e:
                             print(f"Warning: Invalid date format for BIRTH_DATE in node {node_id}: {value}")
                             continue
