@@ -4,7 +4,7 @@ import random
 import json
 
 # Configuration
-NUM_NODE_RECORDS = 1000  # Number of node records to generate
+NUM_NODE_RECORDS = 100000  # Number of node records to generate
 NODE_TYPES = ['person', 'name', 'address', 'anumber', 'receipt', 'form', 'email', 'phone']
 
 def generate_node_data():

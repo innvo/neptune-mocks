@@ -170,9 +170,9 @@ def generate_node_data():
     # Generate properties for each node
     for _ in range(NUM_RECORDS):
         # Generate primary name components
-        primary_first = fake.first_name()
-        primary_last = fake.last_name()
-        full_name = f"{primary_first.upper()} {primary_last.upper()}"
+        primary_first = fake.first_name().upper()
+        primary_last = fake.last_name().upper()
+        full_name = f"{primary_first} {primary_last}"
         
         # Generate primary birth date
         primary_birth_date = (datetime.now() - timedelta(days=random.randint(20*365, 60*365))).strftime('%Y-%m-%d')
