@@ -50,9 +50,7 @@ def create_tables(cursor):
                 edge_id VARCHAR(255) PRIMARY KEY,
                 node_id_from VARCHAR(255),
                 node_id_to VARCHAR(255),
-                edge_type VARCHAR(255),
-                FOREIGN KEY (node_id_from) REFERENCES nodes(node_id),
-                FOREIGN KEY (node_id_to) REFERENCES nodes(node_id)
+                edge_type VARCHAR(255)
             )
         """)
         print("Created edges table")
@@ -167,6 +165,26 @@ def load_data_to_postgres():
             )
             print(f"Loaded {len(name_data)} name nodes")
         
+        # Load person edges
+        print("\nLoading person edges...")
+        edge_df = pd.read_csv('person_edges.csv')
+        edge_data = []
+        
+        for _, row in edge_df.iterrows():
+            edge_data.append((
+                row['edge_id'],
+                row['node_id_from'],
+                row['node_id_to'],
+                row['edge_type']
+            ))
+        
+        if edge_data:
+            execute_values(cursor,
+                "INSERT INTO edges (edge_id, node_id_from, node_id_to, edge_type) VALUES %s ON CONFLICT (edge_id) DO NOTHING",
+                edge_data
+            )
+            print(f"Loaded {len(edge_data)} person edges")
+        
         # Commit the transaction
         conn.commit()
         
@@ -176,6 +194,11 @@ def load_data_to_postgres():
         print("\nNode Types Distribution:")
         for node_type, count in cursor.fetchall():
             print(f"{node_type}: {count} nodes")
+            
+        cursor.execute("SELECT edge_type, COUNT(*) FROM edges GROUP BY edge_type")
+        print("\nEdge Types Distribution:")
+        for edge_type, count in cursor.fetchall():
+            print(f"{edge_type}: {count} edges")
         
         # Close the connection
         cursor.close()

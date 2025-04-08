@@ -37,6 +37,7 @@ def generate_mock_name_data():
             # Add to data list
             name_data.append({
                 'node_id': node_id,
+                'node_type': 'name',
                 'node_name': full_name,
                 'node_properties': json.dumps(node_properties)
             })
