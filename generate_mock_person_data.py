@@ -58,32 +58,29 @@ def generate_birth_date_list(birth_date):
     return date_list
 
 def create_node_properties():
+    """Create node properties with realistic data"""
     # Generate primary name components
-    primary_first = fake.first_name()
-    primary_last = fake.last_name()
+    primary_first = fake.first_name().upper()
+    primary_last = fake.last_name().upper()
     
-    # Generate primary birth date
-    primary_birth_date = (datetime.now() - timedelta(days=random.randint(20*365, 60*365))).strftime('%Y-%m-%d')
+    # Generate primary birth date (between 18 and 80 years ago)
+    primary_birth_date = (datetime.now() - timedelta(days=random.randint(18*365, 80*365))).strftime('%Y-%m-%d')
     
     # Create name list and birth date list
     name_list = generate_name_list(primary_first, primary_last)
     birth_date_list = generate_birth_date_list(primary_birth_date)
     
-    # Create the properties dictionary with NAME_FULL first
+    # Create the properties dictionary
     return {
-        'NAME_FULL': f"{primary_first.upper()} {primary_last.upper()}",
+        'NAME_FULL': f"{primary_first} {primary_last}",
         'NAME_LIST': name_list,
         'BIRTH_DATE': primary_birth_date,
         'BIRTH_DATE_LIST': birth_date_list
     }
 
-
 def generate_mock_person_data():
     """Generate mock person data with realistic properties"""
     try:
-        # Initialize Faker
-        fake = Faker()
-        
         # Read node_data.csv
         print("Reading node data...")
         node_df = pd.read_csv('node_data.csv')
@@ -98,43 +95,14 @@ def generate_mock_person_data():
         # Generate mock data for each person node
         print("\nGenerating mock person data...")
         for _, row in tqdm(person_nodes.iterrows(), total=len(person_nodes), desc="Processing person nodes"):
-            # Generate realistic person data
-            first_name = fake.first_name().upper
-            last_name = fake.last_name().upper
-            full_name = f"{first_name} {last_name}".upper()
-            
-            # Generate birth date (between 18 and 80 years ago)
-            birth_date = fake.date_of_birth(minimum_age=18, maximum_age=80).strftime('%Y-%m-%d')
-            
-            # Generate SSN (format: XXX-XX-XXXX)
-            ssn = f"{random.randint(100, 999)}-{random.randint(10, 99)}-{random.randint(1000, 9999)}"
-            
-            # Generate phone number
-            phone = fake.phone_number()
-            
-            # Generate email
-            email = fake.email()
-            
-            # Generate name and birth date lists
-            name_list = generate_name_list(first_name, last_name)
-            birth_date_list = generate_birth_date_list(birth_date)
-            
-            # Create node properties as a dictionary
-            node_properties = {
-                "NAME_FULL": full_name,
-                "NAME_LIST": name_list,
-                "BIRTH_DATE": birth_date,
-                "BIRTH_DATE_LIST": birth_date_list,
-            }
-            
-            # Convert to JSON string
-            node_properties_json = json.dumps(node_properties)
+            # Get node properties
+            node_properties = create_node_properties()
             
             # Add to data list
             data.append({
                 'node_id': row['node_id'],
-                'node_name': full_name,
-                'node_properties': node_properties_json
+                'node_name': node_properties['NAME_FULL'],
+                'node_properties': json.dumps(node_properties).replace('"', "'")
             })
         
         # Convert to DataFrame
@@ -149,9 +117,7 @@ def generate_mock_person_data():
         print(f"Node ID: {sample['node_id']}")
         print(f"Node Name: {sample['node_name']}")
         print("Node Properties:")
-        print(json.dumps(json.loads(sample['node_properties']), indent=2))
-        
-    
+        print(json.dumps(json.loads(sample['node_properties'].replace("'", '"')), indent=2))
         
         print(f"\nGenerated {len(data)} person records")
         return True

@@ -2,6 +2,51 @@ import pandas as pd
 import json
 import uuid
 from datetime import datetime
+import re
+
+def parse_birth_date(value, node_id):
+    """Parse and format BIRTH_DATE as DateTime"""
+    try:
+        dt = datetime.strptime(value, '%Y-%m-%d')
+        return dt.strftime('%m-%d-%Y')
+    except ValueError as e:
+        print(f"Warning: Invalid date format for BIRTH_DATE in node {node_id}: {value}")
+        return None
+
+def parse_name_full(value):
+    """Parse and format NAME_FULL"""
+    return str(value)
+
+def parse_list_value(value):
+    """Parse and format list values (NAME_LIST, BIRTH_DATE_LIST)"""
+    if isinstance(value, list):
+        # Format each string value with single double quote
+        formatted_values = []
+        for v in value:
+            if isinstance(v, str):
+                formatted_values.append('"' + v + '"')
+            else:
+                formatted_values.append(str(v))
+        return '[' + ','.join(formatted_values) + ']'
+    return str(value)
+
+def parse_string_value(value):
+    """Parse and format other string values"""
+    return f"'{str(value)}'"
+
+def post_process_csv(input_file, output_file):
+    """Clean up double quotes in the CSV file"""
+    print("\nPost-processing CSV file...")
+    with open(input_file, 'r') as f:
+        content = f.read()
+    
+    # Replace double double quotes with single double quotes
+    content = content.replace('""', '"')
+    
+    with open(output_file, 'w') as f:
+        f.write(content)
+    
+    print(f"Post-processed file saved to {output_file}")
 
 def convert_to_opencypher():
     try:
@@ -26,22 +71,15 @@ def convert_to_opencypher():
                 props = json.loads(row['node_properties'])
                 for key, value in props.items():
                     if key == 'BIRTH_DATE':
-                        # Convert BIRTH_DATE to DateTime format
-                        try:
-                            # Parse the date string to ensure it's valid
-                            dt = datetime.strptime(value, '%Y-%m-%d')
-                            # Format for Neptune DateTime in mm-dd-yyyy format
-                            node['BIRTH_DATE:DateTime'] = dt.strftime('%m-%d-%Y')
-                        except ValueError as e:
-                            print(f"Warning: Invalid date format for BIRTH_DATE in node {node_id}: {value}")
-                            continue
-                    elif isinstance(value, list):
-                        # Convert lists to string representation
-                        value = '[' + ','.join(f'"{v}"' if isinstance(v, str) else str(v) for v in value) + ']'
-                        node[f'{key}:String'] = value
+                        formatted_date = parse_birth_date(value, node_id)
+                        if formatted_date:
+                            node['BIRTH_DATE:DateTime'] = formatted_date
+                    elif key == 'NAME_FULL':
+                        node[f'{key}:String'] = parse_name_full(value)
+                    elif key in ['NAME_LIST', 'BIRTH_DATE_LIST']:
+                        node[f'{key}:String'] = parse_list_value(value)
                     else:
-                        # All other properties as String
-                        node[f'{key}:String'] = str(value)
+                        node[f'{key}:String'] = parse_string_value(value)
             except json.JSONDecodeError as e:
                 print(f"Warning: Invalid JSON in properties for node {node_id}: {str(e)}")
                 continue
@@ -53,7 +91,17 @@ def convert_to_opencypher():
         
         # Save to CSV file
         print("\nSaving OpenCypher CSV file...")
-        nodes_df.to_csv('neptune_person_nodes.csv', index=False)
+        temp_file = 'neptune_person_nodes_temp.csv'
+        final_file = 'neptune_person_nodes.csv'
+        nodes_df.to_csv(temp_file, index=False, quoting=1)  # Use single quotes
+        
+        # Post-process the CSV file
+        post_process_csv(temp_file, final_file)
+        
+        # Remove temporary file
+        import os
+        os.remove(temp_file)
+        
         print("Saved nodes to neptune_person_nodes.csv")
         
         # Print sample data
