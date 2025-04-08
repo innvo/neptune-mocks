@@ -13,7 +13,11 @@ def generate_person_name_edges():
     try:
         start_time = time.time()
         
-        # Read node_data.csv, excluding node_name column
+        # Read mock_person_data.csv for person nodes
+        print("Reading person data...")
+        person_df = pd.read_csv('mock_person_data.csv')
+        
+        # Read node_data.csv for name nodes
         print("Reading node data...")
         node_df = pd.read_csv('node_data.csv', usecols=['node_id', 'node_type'])
         
@@ -23,12 +27,6 @@ def generate_person_name_edges():
         node_counts = node_df['node_type'].value_counts()
         for node_type, count in node_counts.items():
             print(f"{node_type}: {count} nodes")
-        
-        # Get person nodes
-        person_nodes = node_df[node_df['node_type'] == 'person']
-        if person_nodes.empty:
-            print("Warning: No person nodes found in node_data.csv")
-            return None
         
         # Get name nodes
         name_nodes = node_df[node_df['node_type'] == 'name']
@@ -44,14 +42,9 @@ def generate_person_name_edges():
         
         # Generate edges for each person with progress bar
         print("\nGenerating person_name edges...")
-        for _, person in tqdm(person_nodes.iterrows(), total=len(person_nodes), desc="Processing person nodes"):
+        for _, person in tqdm(person_df.iterrows(), total=len(person_df), desc="Processing person nodes"):
             person_id = person['node_id']
             linked = False
-            
-            # Verify person_id exists in node_data.csv
-            if not validate_node_existence(node_df, person_id):
-                print(f"\nWarning: Person node {person_id} not found in node_data.csv")
-                continue
             
             # Ensure each person gets at least one name edge
             num_name_edges = random.randint(1, min(3, len(name_nodes)))
@@ -78,13 +71,13 @@ def generate_person_name_edges():
             # Save progress periodically
             if len(edges) >= 10000:
                 edge_df = pd.DataFrame(edges)
-                edge_df.to_csv('person_edges.csv', mode='a', header=not os.path.exists('person_edges.csv'), index=False)
+                edge_df.to_csv('mock_person_name_data.csv', mode='a', header=not os.path.exists('mock_person_name_data.csv'), index=False)
                 edges = []  # Clear the list after saving
         
         # Save any remaining edges
         if edges:
             edge_df = pd.DataFrame(edges)
-            edge_df.to_csv('person_edges.csv', mode='a', header=not os.path.exists('person_edges.csv'), index=False)
+            edge_df.to_csv('mock_person_name_data.csv', mode='a', header=not os.path.exists('mock_person_name_data.csv'), index=False)
         
         # Calculate processing time
         processing_time = time.time() - start_time
@@ -99,21 +92,21 @@ def generate_person_name_edges():
         
         # Print detailed edge statistics
         print("\nEdge Generation Statistics:")
-        print(f"Total number of person nodes: {len(person_nodes)}")
+        print(f"Total number of person nodes: {len(person_df)}")
         print(f"Total number of person_name edges generated: {edge_count}")
-        print(f"Average edges per person: {edge_count/len(person_nodes):.2f}")
+        print(f"Average edges per person: {edge_count/len(person_df):.2f}")
         print(f"Processing time: {processing_time:.2f} seconds")
         print(f"Edges per second: {edge_count / processing_time:.2f}")
         
         # Read the final edge file to get the complete DataFrame
-        final_edge_df = pd.read_csv('person_edges.csv')
+        final_edge_df = pd.read_csv('mock_person_name_data.csv')
         
         # Validate the generated edges
         print("\nValidating generated edges...")
         valid_edges = 0
         invalid_edges = 0
         for _, edge in final_edge_df.iterrows():
-            if (validate_node_existence(node_df, edge['node_id_from']) and 
+            if (edge['node_id_from'] in person_df['node_id'].values and 
                 validate_node_existence(node_df, edge['node_id_to'])):
                 valid_edges += 1
             else:
