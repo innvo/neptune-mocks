@@ -6,6 +6,24 @@ import os
 import json
 from dotenv import load_dotenv
 
+def delete_all_records(cursor):
+    """Delete all records from edges and nodes tables"""
+    try:
+        print("Deleting existing records...")
+        
+        # Delete edges first (due to foreign key constraints)
+        cursor.execute("DELETE FROM edges")
+        print("Deleted all edge records")
+        
+        # Delete nodes
+        cursor.execute("DELETE FROM nodes")
+        print("Deleted all node records")
+        
+        return True
+    except Exception as e:
+        print(f"Error deleting records: {str(e)}")
+        return False
+
 def create_tables(cursor):
     """Create necessary tables if they don't exist"""
     try:
@@ -83,6 +101,10 @@ def load_data_to_postgres():
         
         # Create tables
         if not create_tables(cursor):
+            return False
+            
+        # Delete all existing records
+        if not delete_all_records(cursor):
             return False
         
         # Load person nodes
