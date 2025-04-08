@@ -117,9 +117,6 @@ def generate_mock_person_data():
                 "NAME_LIST": name_list,
                 "BIRTH_DATE": birth_date,
                 "BIRTH_DATE_LIST": birth_date_list,
-                "SSN": ssn,
-                "PHONE": phone,
-                "EMAIL": email
             }
             
             # Convert to JSON string
@@ -146,8 +143,7 @@ def generate_mock_person_data():
         print("Node Properties:")
         print(json.dumps(json.loads(sample['node_properties']), indent=2))
         
-        # Pretty print a random record
-        pretty_print_random_record(df)
+    
         
         print(f"\nGenerated {len(data)} person records")
         return True
@@ -160,17 +156,48 @@ if __name__ == "__main__":
     generate_mock_person_data()
 
 def generate_node_data():
+    # Initialize Faker
+    fake = Faker()
+    
     # Generate node data
     node_data = {
         'node_id': [str(uuid.uuid4()) for _ in range(NUM_RECORDS)],
-        'node_type': [random.choice(NODE_TYPES) for _ in range(NUM_RECORDS)]
+        'node_type': [random.choice(NODE_TYPES) for _ in range(NUM_RECORDS)],
+        'node_name': [],
+        'node_properties': []
     }
+    
+    # Generate properties for each node
+    for _ in range(NUM_RECORDS):
+        # Generate primary name components
+        primary_first = fake.first_name()
+        primary_last = fake.last_name()
+        full_name = f"{primary_first.upper()} {primary_last.upper()}"
+        
+        # Generate primary birth date
+        primary_birth_date = (datetime.now() - timedelta(days=random.randint(20*365, 60*365))).strftime('%Y-%m-%d')
+        
+        # Create name list and birth date list
+        name_list = generate_name_list(primary_first, primary_last)
+        birth_date_list = generate_birth_date_list(primary_birth_date)
+        
+        # Create the properties dictionary
+        properties = {
+            'NAME_FULL': full_name,
+            'NAME_LIST': name_list,
+            'BIRTH_DATE': primary_birth_date,
+            'BIRTH_DATE_LIST': birth_date_list
+        }
+        
+        # Add to node data
+        node_data['node_name'].append(full_name)
+        node_data['node_properties'].append(json.dumps(properties))
     
     # Create DataFrame
     node_df = pd.DataFrame(node_data)
     
     # Save to CSV
-    node_df.to_csv('xxx.csv', index=False)
+    node_df.to_csv('mock_person_data.csv', index=False)
     print("\nNode data saved to 'mock_person_data.csv'")
     
     return node_df
