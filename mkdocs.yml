@@ -1,0 +1,38 @@
+site_name: Neptune Mock Data Generator
+nav:
+  - Home: index.md
+  - API Reference:
+    - generate_mock_person_data.py: api/generate_mock_person_data.md
+    - upload_to_neptune.py: api/upload_to_neptune.md
+  - Usage Guide: usage.md
+  - Development: development.md
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+
+markdown_extensions:
+  - admonition
+  - codehilite
+  - footnotes
+  - meta
+  - toc:
+      permalink: true
+  - pymdownx.arithmatex
+  - pymdownx.betterem
+  - pymdownx.caret
+  - pymdownx.critic
+  - pymdownx.details
+  - pymdownx.emoji
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.superfences
+  - pymdownx.tabbed
+  - pymdownx.tasklist
+  - pymdownx.tilde 
