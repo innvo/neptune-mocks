@@ -1,8 +1,17 @@
 # STS Infrastructure
 
-<table><tbody><tr><td>Resource</td><td>Identifier</td><td>&nbsp;</td></tr><tr><td>Neptune Cluster</td><td>db-neptune-1</td><td>&nbsp;</td></tr><tr><td>S3 Bucket</td><td>deam-neptune</td><td>&nbsp;</td></tr><tr><td>IAM Role</td><td>NeptuneLoadFromS3<br>&nbsp;</td><td>&nbsp;</td></tr><tr><td>Assign Role to Cluster</td><td>&nbsp;</td><td>&nbsp;</td></tr></tbody></table>
+<table><tbody><tr><td>Resource</td><td>Identifier</td><td>Notes</td></tr><tr><td>Bastion Host</td><td>35.170.107.253</td><td>bastion-neptune.pem</td></tr><tr><td>Neptune Cluster</td><td>db-neptune-1</td><td>vpc-0b2d09a26d2da7fa8</td></tr><tr><td>S3 Bucket</td><td>deam-neptune</td><td>&nbsp;</td></tr><tr><td>IAM Role</td><td>NeptuneLoadFromS3<br>&nbsp;</td><td>&nbsp;</td></tr><tr><td>Assign Role to Cluster</td><td>&nbsp;</td><td>&nbsp;</td></tr></tbody></table>
 
-## API Gateway to Acces Neptune
+## Jumpbox Access to Neptune
+
+## ssh -v -i /Users/ericchasin/keys/neptune-bastion-dev.pem ec2-user@35.170.107.253
+
+## ssh -v -i /Users/ericchasin/keys/neptune-bastion-dev.pem -L 8182:neptune-dev.cluster-cz7fmvtxsrei.us-east-1.neptune.amazonaws.com:8182 ec2-user@35.170.107.253
+
+mailto:ec2-user@98.80.203.248  
+ssh -v -i /Users/ericchasin/keys/neptune-bastion-dev.pem ec2-user@98.80.203.248
+
+API Gateway to Acces Neptune
 
 ### Step 1: Ensure Prerequisites
 
@@ -20,4 +29,4 @@ API Gateway can't directly communicate with Neptune, so you'll need to use Lambd
 4.  Enter a function name (e.g., "NeptuneAPIHandler")
 5.  Select a runtime (Python or Node.js recommended)
 6.  Choose or create an execution role with Neptune access. Create a new role with basic Lambda permissions
-7.  Click "Create function"
+7.  Click "Create function"2

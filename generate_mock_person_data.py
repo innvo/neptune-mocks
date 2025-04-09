@@ -25,15 +25,32 @@ if NUM_RECORDS == 0:
 NODE_TYPES = ['person']
 
 def generate_name_list(first_name, last_name):
-    """Generate variations of a person's name"""
-    name_list = [
-        f"{first_name} {last_name}",
-        f"{last_name}, {first_name}",
-        f"{first_name[0]}. {last_name}",
-        f"{last_name}, {first_name[0]}.",
-        f"{first_name} {last_name[0]}.",
-        f"{last_name[0]}. {first_name}"
+    """Generate random variations of a person's name with NAME_FIRST and NAME_LAST labels"""
+    # Create unique variations
+    variations = [
+        {
+            'NAME_FIRST': first_name,
+            'NAME_LAST': last_name
+        },
+        {
+            'NAME_FIRST': f"{first_name[0]}.",
+            'NAME_LAST': last_name
+        },
+        {
+            'NAME_FIRST': first_name,
+            'NAME_LAST': f"{last_name[0]}."
+        }
     ]
+    
+    # Always include the first variation (full name)
+    name_list = [variations[0]]
+    
+    # Randomly select 0-2 additional variations
+    num_additional = random.randint(0, 2)
+    if num_additional > 0:
+        additional_variations = random.sample(variations[1:], num_additional)
+        name_list.extend(additional_variations)
+    
     return name_list
 
 def generate_birth_date_list(birth_date):
