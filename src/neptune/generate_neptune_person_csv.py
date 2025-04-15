@@ -29,11 +29,13 @@ def convert_to_opencypher():
             # Add all properties from the JSON
             for key, value in properties.items():
                 if isinstance(value, list):
-                    # Convert list to string representation
-                    value = '[' + ','.join(f'"{v}"' if isinstance(v, str) else str(v) for v in value) + ']'
+                    # Convert list to string representation with single quotes for each element
+                    value = '[' + ','.join(f"'{str(v)}'" if isinstance(v, str) else str(v) for v in value) + ']'
                 # Convert property name to lowercase for String suffix
                 if key.lower() == 'name_full':
                     node[f'{key.lower()}:String'] = f'"{str(value)}"'
+                elif key.lower() == 'name_list':
+                    node['name_full_list:String[]'] = f'"{str(value)}"'
                 else:
                     node[f'{key.lower()}:String'] = f"'{str(value)}'"
             
