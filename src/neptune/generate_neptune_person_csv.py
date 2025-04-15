@@ -30,6 +30,9 @@ def convert_to_opencypher():
             for key, value in properties.items():
                 if isinstance(value, list):
                     # Convert list to string representation with single quotes for each element
+                    if key.lower() == 'name_list':
+                        # Convert all names to uppercase
+                        value = [v.upper() for v in value]
                     value = '[' + ','.join(f"'{str(v)}'" if isinstance(v, str) else str(v) for v in value) + ']'
                 # Convert property name to lowercase for String suffix
                 if key.lower() == 'name_full':
