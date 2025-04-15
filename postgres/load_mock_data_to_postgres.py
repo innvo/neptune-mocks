@@ -109,7 +109,7 @@ def load_data_to_postgres():
         
         # Load person nodes
         print("\nLoading person nodes...")
-        person_df = pd.read_csv('mock_person_data.csv')
+        person_df = pd.read_csv('data/output/mock_person_data.csv')
         person_data = []
         invalid_json_count = 0
         
@@ -136,36 +136,6 @@ def load_data_to_postgres():
                 person_data
             )
             print(f"Loaded {len(person_data)} person nodes")
-        
-        # Load name nodes
-        print("\nLoading name nodes...")
-        name_df = pd.read_csv('mock_name_data.csv')
-        name_data = []
-        invalid_json_count = 0
-        
-        for _, row in name_df.iterrows():
-            # Validate and escape JSON
-            valid_json = validate_json(row['node_properties'])
-            if valid_json is None:
-                invalid_json_count += 1
-                continue
-                
-            name_data.append((
-                row['node_id'],
-                'name',
-                row['node_name'],
-                valid_json
-            ))
-        
-        if invalid_json_count > 0:
-            print(f"Warning: Skipped {invalid_json_count} name nodes due to invalid JSON")
-        
-        if name_data:
-            execute_values(cursor,
-                "INSERT INTO nodes (node_id, node_type, node_name, node_properties) VALUES %s ON CONFLICT (node_id) DO NOTHING",
-                name_data
-            )
-            print(f"Loaded {len(name_data)} name nodes")
         
         # Commit the transaction
         conn.commit()
