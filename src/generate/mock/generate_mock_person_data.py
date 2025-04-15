@@ -15,9 +15,9 @@ os.makedirs('data/output', exist_ok=True)
 
 # Read node_data.csv and count person records
 try:
-    node_df = pd.read_csv('data/input/node_data.csv')
+    node_df = pd.read_csv('src/data/input/node_data.csv')
     NUM_RECORDS = len(node_df[node_df['node_type'] == 'person'])
-    print(f"\nFound {NUM_RECORDS} person records in data/input/node_data.csv")
+    print(f"\nFound {NUM_RECORDS} person records in src/data/input/node_data.csv")
 except Exception as e:
     print(f"Error reading data/input/node_data.csv: {str(e)}")
     NUM_RECORDS = 0  # Default to 0 if file not found or error
@@ -81,7 +81,7 @@ def generate_mock_person_data():
         
         # Read node_data.csv
         print("Reading node data...")
-        node_df = pd.read_csv('data/input/node_data.csv')
+        node_df = pd.read_csv('src/data/input/node_data.csv')
         
         # Filter for person nodes
         person_nodes = node_df[node_df['node_type'] == 'person']
@@ -136,7 +136,7 @@ def generate_mock_person_data():
         df = pd.DataFrame(data)
         
         # Save to CSV in data/output directory
-        output_path = 'data/output/mock_person_data.csv'
+        output_path = 'src/data/output/mock_person_data.csv'
         df.to_csv(output_path, index=False)
         
         # Print sample record
@@ -200,7 +200,7 @@ def generate_node_data():
     node_df = pd.DataFrame(node_data)
     
     # Save to CSV
-    node_df.to_csv('mock_person_data.csv', index=False)
+    node_df.to_csv('src/data/output/mock_person_data.csv', index=False)
     print("\nNode data saved to 'mock_person_data.csv'")
     
     return node_df

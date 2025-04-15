@@ -9,7 +9,7 @@ NUM_NODE_RECORDS = 10000  # Number of node records to generate
 NODE_TYPES = ['person', 'name', 'address', 'anumber', 'receipt', 'form', 'email', 'phone']
 
 # Ensure the data/input directory exists
-os.makedirs('data/input', exist_ok=True)
+os.makedirs('src/data/input', exist_ok=True)
 
 def generate_node_data():
     # Generate node data
@@ -22,7 +22,7 @@ def generate_node_data():
     node_df = pd.DataFrame(node_data)
     
     # Save to CSV in data/input directory
-    output_path = 'data/input/node_data.csv'
+    output_path = 'src/data/input/node_data.csv'
     node_df.to_csv(output_path, index=False)
     print(f"\nNode data saved to '{output_path}'")
     
@@ -31,16 +31,16 @@ def generate_node_data():
 def update_person_records():
     try:
         # Read node_data.csv from data/input directory
-        node_df = pd.read_csv('data/input/node_data.csv')
+        node_df = pd.read_csv('src/data/input/node_data.csv')
         
         # Read mock_person_data.csv from data/input directory
-        person_df = pd.read_csv('data/input/mock_person_data.csv')
+        person_df = pd.read_csv('src/data/input/mock_person_data.csv')
         
         # Filter for person records
         person_records = node_df[node_df['node_type'] == 'person']
         
         # Save updated DataFrame to data/input directory
-        output_path = 'data/input/node_data.csv'
+        output_path = 'src/data/input/node_data.csv'
         node_df.to_csv(output_path, index=False)
         print(f"\nUpdated node data saved to '{output_path}'")
         
