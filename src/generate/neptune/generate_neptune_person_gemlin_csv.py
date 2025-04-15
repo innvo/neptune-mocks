@@ -22,8 +22,7 @@ def convert_to_opencypher():
             
             # Create the node with required fields
             node = {
-                ':ID': row['node_id'],
-                ':LABEL': row['node_type']
+                ':ID': row['node_id']
             }
             
             # Add all properties from the JSON
@@ -33,22 +32,37 @@ def convert_to_opencypher():
                     if key.lower() == 'name_list':
                         # Convert all names to uppercase
                         value = [v.upper() for v in value]
+                        # Format name list with single quotes for each element and double quotes for the array
+                        node['name_full_list:String[]'] = '[' + ','.join(f"'{str(v)}'" for v in value) + ']'
+                        continue
+                    elif key.lower() == 'birth_date_list':
+                        node[f'{key.lower()}:Date[]'] = '"[' + ','.join(f"'{str(v)}'" if isinstance(v, str) else str(v) for v in value) + ']"'
+                        continue
                     value = '[' + ','.join(f"'{str(v)}'" if isinstance(v, str) else str(v) for v in value) + ']'
                 # Convert property name to lowercase for String suffix
                 if key.lower() == 'name_full':
                     node[f'{key.lower()}:String'] = f'"{str(value)}"'
-                elif key.lower() == 'name_list':
-                    node['name_full_list:String[]'] = f'"{str(value)}"'
+                elif key.lower() == 'birth_date':
+                    node[f'{key.lower()}:Date'] = f"'{str(value)}'"
                 else:
                     node[f'{key.lower()}:String'] = f"'{str(value)}'"
+            
+            # Add person label
+            node[':LABEL'] = 'person'
             
             nodes.append(node)
         
         # Convert to DataFrame
         nodes_df = pd.DataFrame(nodes)
         
+        # Reorder columns to ensure :LABEL is last
+        cols = nodes_df.columns.tolist()
+        cols.remove(':LABEL')
+        cols.append(':LABEL')
+        nodes_df = nodes_df[cols]
+        
         # Save to CSV
-        output_path = 'src/data/output/neptune_person_nodes.csv'
+        output_path = 'src/data/output/neptune_person_nodes_opencypher.csv'
         nodes_df.to_csv(output_path, index=False)
         
         # Print sample record
