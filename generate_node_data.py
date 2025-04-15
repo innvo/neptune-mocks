@@ -2,10 +2,14 @@ import pandas as pd
 import uuid
 import random
 import json
+import os
 
 # Configuration
-NUM_NODE_RECORDS = 1000  # Number of node records to generate
+NUM_NODE_RECORDS = 10000  # Number of node records to generate
 NODE_TYPES = ['person', 'name', 'address', 'anumber', 'receipt', 'form', 'email', 'phone']
+
+# Ensure the data/input directory exists
+os.makedirs('data/input', exist_ok=True)
 
 def generate_node_data():
     # Generate node data
@@ -17,27 +21,28 @@ def generate_node_data():
     # Create DataFrame
     node_df = pd.DataFrame(node_data)
     
-    # Save to CSV
-    node_df.to_csv('node_data.csv', index=False)
-    print("\nNode data saved to 'node_data.csv'")
+    # Save to CSV in data/input directory
+    output_path = 'data/input/node_data.csv'
+    node_df.to_csv(output_path, index=False)
+    print(f"\nNode data saved to '{output_path}'")
     
     return node_df
 
 def update_person_records():
     try:
-        # Read node_data.csv
-        node_df = pd.read_csv('node_data.csv')
+        # Read node_data.csv from data/input directory
+        node_df = pd.read_csv('data/input/node_data.csv')
         
-        # Read mock_person_data.csv
-        person_df = pd.read_csv('mock_person_data.csv')
+        # Read mock_person_data.csv from data/input directory
+        person_df = pd.read_csv('data/input/mock_person_data.csv')
         
         # Filter for person records
         person_records = node_df[node_df['node_type'] == 'person']
         
-       
-        # Save updated DataFrame
-        node_df.to_csv('node_data.csv', index=False)
-        print("\nUpdated node data saved to 'node_data.csv'")
+        # Save updated DataFrame to data/input directory
+        output_path = 'data/input/node_data.csv'
+        node_df.to_csv(output_path, index=False)
+        print(f"\nUpdated node data saved to '{output_path}'")
         
         return node_df
     except Exception as e:

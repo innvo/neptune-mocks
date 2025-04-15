@@ -5,17 +5,21 @@ from datetime import datetime, timedelta
 import json
 from faker import Faker
 from tqdm import tqdm
+import os
 
 # Initialize Faker
 fake = Faker()
 
+# Ensure the data/output directory exists
+os.makedirs('data/output', exist_ok=True)
+
 # Read node_data.csv and count person records
 try:
-    node_df = pd.read_csv('node_data.csv')
+    node_df = pd.read_csv('data/input/node_data.csv')
     NUM_RECORDS = len(node_df[node_df['node_type'] == 'person'])
-    print(f"\nFound {NUM_RECORDS} person records in node_data.csv")
+    print(f"\nFound {NUM_RECORDS} person records in data/input/node_data.csv")
 except Exception as e:
-    print(f"Error reading node_data.csv: {str(e)}")
+    print(f"Error reading data/input/node_data.csv: {str(e)}")
     NUM_RECORDS = 0  # Default to 0 if file not found or error
 
 if NUM_RECORDS == 0:
@@ -37,15 +41,15 @@ def generate_name_list(first_name, last_name):
     return name_list
 
 def generate_birth_date_list(birth_date):
-    """Generate variations of a birth date"""
+    """Generate variations of a birth date, all in YYYY-MM-DD format"""
     date_obj = datetime.strptime(birth_date, '%Y-%m-%d')
     date_list = [
         birth_date,  # YYYY-MM-DD
-        date_obj.strftime('%m/%d/%Y'),  # MM/DD/YYYY
-        date_obj.strftime('%d-%m-%Y'),  # DD-MM-YYYY
-        date_obj.strftime('%Y%m%d'),  # YYYYMMDD
-        date_obj.strftime('%m%d%Y'),  # MMDDYYYY
-        date_obj.strftime('%d%m%Y')  # DDMMYYYY
+        date_obj.strftime('%Y-%m-%d'),  # YYYY-MM-DD
+        date_obj.strftime('%Y-%m-%d'),  # YYYY-MM-DD
+        date_obj.strftime('%Y-%m-%d'),  # YYYY-MM-DD
+        date_obj.strftime('%Y-%m-%d'),  # YYYY-MM-DD
+        date_obj.strftime('%Y-%m-%d')  # YYYY-MM-DD
     ]
     return date_list
 
@@ -69,7 +73,6 @@ def create_node_properties():
         'BIRTH_DATE_LIST': birth_date_list
     }
 
-
 def generate_mock_person_data():
     """Generate mock person data with realistic properties"""
     try:
@@ -78,7 +81,7 @@ def generate_mock_person_data():
         
         # Read node_data.csv
         print("Reading node data...")
-        node_df = pd.read_csv('node_data.csv')
+        node_df = pd.read_csv('data/input/node_data.csv')
         
         # Filter for person nodes
         person_nodes = node_df[node_df['node_type'] == 'person']
@@ -91,9 +94,9 @@ def generate_mock_person_data():
         print("\nGenerating mock person data...")
         for _, row in tqdm(person_nodes.iterrows(), total=len(person_nodes), desc="Processing person nodes"):
             # Generate realistic person data
-            first_name = fake.first_name().upper
-            last_name = fake.last_name().upper
-            full_name = f"{first_name} {last_name}".upper()
+            first_name = fake.first_name().upper()
+            last_name = fake.last_name().upper()
+            full_name = f"{first_name} {last_name}"
             
             # Generate birth date (between 18 and 80 years ago)
             birth_date = fake.date_of_birth(minimum_age=18, maximum_age=80).strftime('%Y-%m-%d')
@@ -132,8 +135,9 @@ def generate_mock_person_data():
         # Convert to DataFrame
         df = pd.DataFrame(data)
         
-        # Save to CSV
-        df.to_csv('mock_person_data.csv', index=False)
+        # Save to CSV in data/output directory
+        output_path = 'data/output/mock_person_data.csv'
+        df.to_csv(output_path, index=False)
         
         # Print sample record
         print("\nSample Record:")
@@ -143,9 +147,8 @@ def generate_mock_person_data():
         print("Node Properties:")
         print(json.dumps(json.loads(sample['node_properties']), indent=2))
         
-    
-        
         print(f"\nGenerated {len(data)} person records")
+        print(f"Saved to {output_path}")
         return True
         
     except Exception as e:
