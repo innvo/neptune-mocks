@@ -200,7 +200,7 @@ def generate_node_data():
     node_df = pd.DataFrame(node_data)
     
     # Save to CSV
-    node_df.to_csv('src/data/output/mock_person_data.csv', index=False)
+    node_df.to_csv('src/data/output/gds/mock_person_data.csv', index=False)
     print("\nNode data saved to 'mock_person_data.csv'")
     
     return node_df
