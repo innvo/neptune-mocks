@@ -1,3 +1,4 @@
+# Infrastructure
 ## Create SSH Tunnel
 
 ```
@@ -10,6 +11,40 @@ Not seeing endpoint
 ```
 curl -k -X GET https://localhost:8182/status
 ```
+
+# Pipeline
+1. run src/generate/node/generate_node_data.py
+ - This creates base nodes of varying types (address,email,onlineaccount,person,phone,receipt).  Variable to set the number of records. 
+2. run src/generate/mock/generate_mock_person_data.py
+  - This simuates a GDS person node. As of 4/5/2025 it only include limited set of node_properties.  
+  - Reads src/data/input/node_data.csv
+3. run src/generate/neptune/generate_neptune_person_gemlin_csv.py
+  - This create AWS neptune gremlin load file
+  - reads src/data/output/gds/mock_person_data.csv
+4. run src/utils/load_data_output_neptune_to_s3-deam-neptune.py
+  - uploades csv files to S3 bucket
+5. Clean out vertices or fast rest neptune (optional)
+6. run curl command to execute neptune bulkloader (gremlin)
+```
+curl -k -X POST \
+  -H "Content-Type: application/json" \
+  -d '{
+    "source": "s3://deam-neptune/neptune_person_nodes_gremlin.csv",
+    "format": "csv",
+    "iamRoleArn": "arn:aws:iam::244081531951:role/NeptuneLoadFromS3",
+    "region": "us-east-1",
+    "failOnError": "TRUE",
+    "parallelism": "MEDIUM",
+    "updateSingleCardinalityProperties": "FALSE",
+    "queueRequest": "TRUE"
+  }' \
+  https://localhost:8182/loader
+```
+7. User opencypher or gremlin.pynb to check data load
+
+
+
+`
 ## Neptune Bulk Loader
 ### Opencypher
 ```
