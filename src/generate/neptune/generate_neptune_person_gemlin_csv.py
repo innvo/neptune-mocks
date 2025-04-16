@@ -5,6 +5,7 @@ from tqdm import tqdm
 from datetime import datetime, timedelta
 import random
 
+# TODO: Not relevant for GDS 
 def generate_variant_dates(base_date, count=6):
     """Generate slightly different dates based on the base date"""
     base = datetime.strptime(base_date, '%Y-%m-%d')
@@ -15,7 +16,8 @@ def generate_variant_dates(base_date, count=6):
         variant_date = base + timedelta(days=variation)
         dates.append(variant_date.strftime('%Y-%m-%d'))
     return dates
-
+    
+# TODO: Replace with GDS data
 def convert_to_gremlin():
     try:
         # Ensure output directory exists
@@ -24,6 +26,7 @@ def convert_to_gremlin():
         # Read the mock person data
         print("Reading mock person data...")
         df = pd.read_csv('src/data/output/gds/mock_person_data.csv')
+        # TODO: Replace with GDS data
         
         # Initialize list to store converted nodes
         nodes = []

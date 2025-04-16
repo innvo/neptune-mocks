@@ -1,18 +1,22 @@
 # Infrastructure
-## Create SSH Tunnel
+1. Accessing AWS Neptune requires a SSH Tunnel
+2. AWS Neptune requires:
+  - Database Cluster: neptune-dev.cluster-cz7fmvtxsrei.us-east-1.neptune.amazonaws.com
+  - IAM role to all the cluster to access S3. arn:aws:iam::244081531951:role/NeptuneLoadFromS3
+  - VPC Endpoint to allow Neptune to access S3
+  - S3 Bucket to store Neptune data loading csv files
 
+## Create SSH Tunnel
 ```
 ssh  -L 8182:neptune-dev.cluster-cz7fmvtxsrei.us-east-1.neptune.amazonaws.com:8182 -i neptune-bastion-dev.pem ec2-user@35.170.107.253
 
 ```
 ### Check Neptune Status
-Not seeing endpoint
-
 ```
 curl -k -X GET https://localhost:8182/status
 ```
 
-# Pipeline
+# Pipeline to generate fake Neptune data (04/15/2025 is only persons)
 1. run src/generate/node/generate_node_data.py
  - This creates base nodes of varying types (address,email,onlineaccount,person,phone,receipt).  Variable to set the number of records. 
 2. run src/generate/mock/generate_mock_person_data.py
@@ -43,77 +47,22 @@ curl -k -X POST \
 7. User opencypher or gremlin.pynb to check data load
 
 
-
-`
-## Neptune Bulk Loader
-### Opencypher
-```
-curl -k -X POST \
-  -H "Content-Type: application/json" \
-  -d '{
-    "source": "s3://deam-neptune/neptune_person_nodes_opencypher.csv",
-    "format": "opencypher",
-    "iamRoleArn": "arn:aws:iam::244081531951:role/NeptuneLoadFromS3",
-    "region": "us-east-1",
-    "failOnError": "TRUE",
-    "parallelism": "MEDIUM",
-    "updateSingleCardinalityProperties": "FALSE",
-    "queueRequest": "TRUE"
-  }' \
-  https://localhost:8182/loader
-```
-### gremlin
-```
-curl -k -X POST \
-  -H "Content-Type: application/json" \
-  -d '{
-    "source": "s3://deam-neptune/neptune_person_nodes_gremlin.csv",
-    "format": "csv",
-    "iamRoleArn": "arn:aws:iam::244081531951:role/NeptuneLoadFromS3",
-    "region": "us-east-1",
-    "failOnError": "TRUE",
-    "parallelism": "MEDIUM",
-    "updateSingleCardinalityProperties": "FALSE",
-    "queueRequest": "TRUE"
-  }' \
-  https://localhost:8182/loader
-```
-
-## Count of nodes with label person
-```
-curl -k -X POST \
-  -H "Content-Type: application/json" \
-  -H "Accept: application/json" \
-  -d '{"query": "MATCH (n:person) RETURN count(n) as count"}' \
-  https://localhost:8182/opencypher
-
-curl -k -X POST \
-  -H "Content-Type: application/json" \
-  -d '{"gremlin":"g.V().hasLabel(\"person\").count()"}' \
-  https://localhost:8182/gremlin
-```
-
-## Display nodes with label person
-```
-curl -k -X POST \
-  -H "Content-Type: application/json" \
-  -H "Accept: application/json" \
-  -d '{"query": "MATCH (n:person) RETURN n LIMIT 10"}' \
-  https://localhost:8182/opencypher
-
-curl -k -X POST \
-  -H "Content-Type: application/json" \
-  -d '{"gremlin":"g.V().hasLabel(\"person\").limit(10)"}' \
-  https://localhost:8182/gremlin
-```
-
+# Validation
 ## Count of all nodes
+### Opencphyer
 ```
 curl -k -X POST \
   -H "Content-Type: application/json" \
   -H "Accept: application/json" \
   -d '{"query": "MATCH (n) RETURN count(n) as count"}' \
   https://localhost:8182/opencypher
+```
+### Grelimn
+```
+curl -k -X POST \
+     -H "Content-Type: application/json" \
+     https://localhost:8182/gremlin \
+     -d '{"gremlin": "g.V().fold().project(\"vertix_cnt\").by(count(local))"}' | jq
 ```
 
 ## Reset Neptune
@@ -129,17 +78,3 @@ curl -k -X POST \
         "action" : "performDatabaseReset",
         "token" : "fecb1d1f-27d6-234f-e77d-5465c7b04705"
       }'
-
-#  Delete all nodes
-```
-curl -k -X POST \
-  -H "Content-Type: application/json" \
-  -H "Accept: application/json" \
-  -d '{"query": "MATCH (n) DETACH DELETE n"}' \
-  https://localhost:8182/opencypher
-
-curl -k -X POST \
-  -H "Content-Type: application/json" \
-  -d '{"gremlin":"g.V().drop()"}' \
-  https://localhost:8182/gremlin
-```

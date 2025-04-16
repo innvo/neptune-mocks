@@ -38,7 +38,7 @@ def generate_name_list(first_name, last_name):
         f"{first_name} {last_name[0]}.",
         f"{last_name[0]}. {first_name}"
     ]
-    return name_list
+    return [name.upper() for name in name_list]
 
 def generate_birth_date_list(birth_date):
     """Generate variations of a birth date, all in YYYY-MM-DD format"""
@@ -51,7 +51,7 @@ def generate_birth_date_list(birth_date):
         date_obj.strftime('%Y-%m-%d'),  # YYYY-MM-DD
         date_obj.strftime('%Y-%m-%d')  # YYYY-MM-DD
     ]
-    return date_list
+    return [date.upper() for date in date_list]
 
 def create_node_properties():
     # Generate primary name components
@@ -99,16 +99,16 @@ def generate_mock_person_data():
             full_name = f"{first_name} {last_name}"
             
             # Generate birth date (between 18 and 80 years ago)
-            birth_date = fake.date_of_birth(minimum_age=18, maximum_age=80).strftime('%Y-%m-%d')
+            birth_date = fake.date_of_birth(minimum_age=18, maximum_age=80).strftime('%Y-%m-%d').upper()
             
             # Generate SSN (format: XXX-XX-XXXX)
             ssn = f"{random.randint(100, 999)}-{random.randint(10, 99)}-{random.randint(1000, 9999)}"
             
             # Generate phone number
-            phone = fake.phone_number()
+            phone = fake.phone_number().upper()
             
             # Generate email
-            email = fake.email()
+            email = fake.email().upper()
             
             # Generate name and birth date lists
             name_list = generate_name_list(first_name, last_name)
@@ -120,6 +120,9 @@ def generate_mock_person_data():
                 "NAME_LIST": name_list,
                 "BIRTH_DATE": birth_date,
                 "BIRTH_DATE_LIST": birth_date_list,
+                "SSN": ssn,
+                "PHONE": phone,
+                "EMAIL": email
             }
             
             # Convert to JSON string
