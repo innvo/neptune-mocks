@@ -30,15 +30,16 @@ NODE_TYPES = ['person']
 
 def generate_name_list(first_name, last_name):
     """Generate variations of a person's name"""
-    name_list = [
-        {"NAME_FULL": f"{first_name} {last_name}", "COUNT": 2},
-        {"NAME_FULL": f"{last_name}, {first_name}", "COUNT": 2},
-        {"NAME_FULL": f"{first_name[0]}. {last_name}", "COUNT": 2},
-        {"NAME_FULL": f"{last_name}, {first_name[0]}.", "COUNT": 2},
-        {"NAME_FULL": f"{first_name} {last_name[0]}.", "COUNT": 2},
-        {"NAME_FULL": f"{last_name[0]}. {first_name}", "COUNT": 2}
+    name_variations = [
+        f"{first_name} {last_name}",
+        f"{last_name}, {first_name}",
+        f"{first_name[0]}. {last_name}",
+        f"{last_name}, {first_name[0]}.",
+        f"{first_name} {last_name[0]}.",
+        f"{last_name[0]}. {first_name}"
     ]
-    return [{"NAME_FULL": name["NAME_FULL"].upper(), "COUNT": name["COUNT"]} for name in name_list]
+    # Join all variations with semicolons
+    return ';'.join(name.upper() for name in name_variations)
 
 def generate_birth_date_list(birth_date):
     """Generate variations of a birth date, with slight variations"""
@@ -103,13 +104,13 @@ def generate_mock_person_data():
             birth_date = fake.date_of_birth(minimum_age=18, maximum_age=80).strftime('%Y-%m-%d').upper()
             
             # Generate SSN (format: XXX-XX-XXXX)
-            ssn = f"{random.randint(100, 999)}-{random.randint(10, 99)}-{random.randint(1000, 9999)}"
+            #ssn = f"{random.randint(100, 999)}-{random.randint(10, 99)}-{random.randint(1000, 9999)}"
             
             # Generate phone number
-            phone = fake.phone_number().upper()
+            #phone = fake.phone_number().upper()
             
             # Generate email
-            email = fake.email().upper()
+            #email = fake.email().upper()
             
             # Generate name and birth date lists
             name_full_list = generate_name_list(first_name, last_name)
@@ -121,9 +122,9 @@ def generate_mock_person_data():
                 "NAME_FULL_LIST": name_full_list,
                 "BIRTH_DATE": birth_date,
                 "BIRTH_DATE_LIST": birth_date_list,
-                "SSN": ssn,
-                "PHONE": phone,
-                "EMAIL": email
+                # "SSN": ssn,
+                # "PHONE": phone,
+                # "EMAIL": email
             }
             
             # Convert to JSON string
@@ -140,7 +141,7 @@ def generate_mock_person_data():
         df = pd.DataFrame(data)
         
         # Save to CSV in data/output directory
-        output_path = 'src/data/output/mock_person_data.csv'
+        output_path = 'src/data/output/gds/mock_person_data.csv'
         df.to_csv(output_path, index=False)
         
         # Print sample record
@@ -203,9 +204,9 @@ def generate_node_data():
     # Create DataFrame
     node_df = pd.DataFrame(node_data)
     
-    # Save to CSV
-    node_df.to_csv('src/data/output/gds/mock_person_data.csv', index=False)
-    print("\nNode data saved to 'mock_person_data.csv'")
+    # # Save to CSV
+    # node_df.to_csv('src/data/output/gds/mock_person_data.csv', index=False)
+    # print("\nNode data saved to 'mock_person_data.csv'")
     
     return node_df
 
