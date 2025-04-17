@@ -10,7 +10,7 @@ def convert_to_opencypher():
         
         # Read the mock person data
         print("Reading mock person data...")
-        df = pd.read_csv('src/data/output/mock_person_data.csv')
+        df = pd.read_csv('src/data/output/gds/mock_person_data.csv')
         
         # Initialize list to store converted nodes
         nodes = []
@@ -30,8 +30,8 @@ def convert_to_opencypher():
                 if isinstance(value, list):
                     # Convert list to string representation with single quotes for each element
                     if key.lower() == 'name_list':
-                        # Convert all names to uppercase
-                        value = [v.upper() for v in value]
+                        # Convert all names to uppercase and clean up semicolon formatting
+                        value = [v.upper().replace(' , ', ';').replace(', ', ';').replace(' ,', ';').replace('; ', ';').replace(' ;', ';') for v in value]
                         # Format name list with single quotes for each element and double quotes for the array
                         node['name_full_list:String[]'] = '[' + ','.join(f"'{str(v)}'" for v in value) + ']'
                         continue
@@ -62,7 +62,7 @@ def convert_to_opencypher():
         nodes_df = nodes_df[cols]
         
         # Save to CSV
-        output_path = 'src/data/output/neptune_person_nodes_opencypher.csv'
+        output_path = 'src/data/output/neptune/neptune_person_nodes_opencypher.csv'
         nodes_df.to_csv(output_path, index=False)
         
         # Print sample record
