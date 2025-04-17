@@ -31,14 +31,14 @@ NODE_TYPES = ['person']
 def generate_name_list(first_name, last_name):
     """Generate variations of a person's name"""
     name_list = [
-        f"{first_name} {last_name}",
-        f"{last_name}, {first_name}",
-        f"{first_name[0]}. {last_name}",
-        f"{last_name}, {first_name[0]}.",
-        f"{first_name} {last_name[0]}.",
-        f"{last_name[0]}. {first_name}"
+        {"NAME_FULL": f"{first_name} {last_name}", "NAME_TYPE": "PRIMARY"},
+        {"NAME_FULL": f"{last_name}, {first_name}", "NAME_TYPE": "PRIMARY"},
+        {"NAME_FULL": f"{first_name[0]}. {last_name}", "NAME_TYPE": "PRIMARY"},
+        {"NAME_FULL": f"{last_name}, {first_name[0]}.", "NAME_TYPE": "PRIMARY"},
+        {"NAME_FULL": f"{first_name} {last_name[0]}.", "NAME_TYPE": "PRIMARY"},
+        {"NAME_FULL": f"{last_name[0]}. {first_name}", "NAME_TYPE": "PRIMARY"}
     ]
-    return [name.upper() for name in name_list]
+    return [{"NAME_FULL": name["NAME_FULL"].upper(), "NAME_TYPE": name["NAME_TYPE"]} for name in name_list]
 
 def generate_birth_date_list(birth_date):
     """Generate variations of a birth date, all in YYYY-MM-DD format"""
@@ -62,13 +62,13 @@ def create_node_properties():
     primary_birth_date = (datetime.now() - timedelta(days=random.randint(20*365, 60*365))).strftime('%Y-%m-%d')
     
     # Create name list and birth date list
-    name_list = generate_name_list(primary_first, primary_last)
+    name_full_list = generate_name_list(primary_first, primary_last)
     birth_date_list = generate_birth_date_list(primary_birth_date)
     
-    # Create the properties dictionary with NAME_FULL first
+    # Create the properties dictionary
     return {
         'NAME_FULL': f"{primary_first.upper()} {primary_last.upper()}",
-        'NAME_LIST': name_list,
+        'NAME_FULL_LIST': name_full_list,
         'BIRTH_DATE': primary_birth_date,
         'BIRTH_DATE_LIST': birth_date_list
     }
@@ -111,13 +111,13 @@ def generate_mock_person_data():
             email = fake.email().upper()
             
             # Generate name and birth date lists
-            name_list = generate_name_list(first_name, last_name)
+            name_full_list = generate_name_list(first_name, last_name)
             birth_date_list = generate_birth_date_list(birth_date)
             
             # Create node properties as a dictionary
             node_properties = {
                 "NAME_FULL": full_name,
-                "NAME_LIST": name_list,
+                "NAME_FULL_LIST": name_full_list,
                 "BIRTH_DATE": birth_date,
                 "BIRTH_DATE_LIST": birth_date_list,
                 "SSN": ssn,
@@ -184,13 +184,13 @@ def generate_node_data():
         primary_birth_date = (datetime.now() - timedelta(days=random.randint(20*365, 60*365))).strftime('%Y-%m-%d')
         
         # Create name list and birth date list
-        name_list = generate_name_list(primary_first, primary_last)
+        name_full_list = generate_name_list(primary_first, primary_last)
         birth_date_list = generate_birth_date_list(primary_birth_date)
         
         # Create the properties dictionary
         properties = {
             'NAME_FULL': full_name,
-            'NAME_LIST': name_list,
+            'NAME_FULL_LIST': name_full_list,
             'BIRTH_DATE': primary_birth_date,
             'BIRTH_DATE_LIST': birth_date_list
         }
