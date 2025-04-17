@@ -1,47 +1,16 @@
-"""
-Neptune Gremlin to OpenCypher Person Converter Module
-
-This module provides functionality to convert Neptune Gremlin JSON responses
-containing person data into OpenCypher-compatible format. It handles the conversion
-of date formats and property structures.
-
-Functions:
-    convert_epoch_to_iso(value): Convert epoch milliseconds to ISO format
-    clean_properties(properties): Clean and format vertex properties
-    transform_gremlin_response(response): Transform Gremlin response to OpenCypher format
-    convert_gremlin_to_opencypher(input_file): Convert a Gremlin JSON file to OpenCypher format
-"""
-
 import json
 import os
 from datetime import datetime
 
 def convert_epoch_to_iso(value):
-    """
-    Convert epoch milliseconds to ISO format YYYY-MM-DDTHH:MM:SSZ.
-    
-    Args:
-        value: An epoch timestamp in milliseconds or any other value
-        
-    Returns:
-        str: ISO formatted date string if input is a timestamp,
-             original value otherwise
-    """
+    """Convert epoch millis to ISO format YYYY-MM-DDTHH:MM:SSZ."""
     if isinstance(value, int) or isinstance(value, float):
         dt = datetime.utcfromtimestamp(value / 1000)
         return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
     return value
 
 def clean_properties(properties):
-    """
-    Clean and format vertex properties, handling date conversions.
-    
-    Args:
-        properties (dict): Dictionary of vertex properties
-        
-    Returns:
-        dict: Cleaned properties with converted dates and flattened single-item lists
-    """
+    """Flatten lists with single values and convert dates."""
     cleaned = {}
     for key, val in properties.items():
         if isinstance(val, list):
@@ -65,15 +34,7 @@ def clean_properties(properties):
     return cleaned
 
 def transform_gremlin_response(response):
-    """
-    Transform raw Neptune Gremlin response to OpenCypher-style JSON.
-    
-    Args:
-        response (dict): Raw Gremlin response containing person vertices
-        
-    Returns:
-        dict: Transformed data in OpenCypher format
-    """
+    """Transform raw Neptune response to OpenCypher-style JSON."""
     raw_results = response.get('result', {}).get('data', {}).get('@value', [])
     transformed_results = []
 
@@ -113,20 +74,8 @@ def transform_gremlin_response(response):
 
     return {"results": transformed_results}
 
-def convert_gremlin_to_opencypher(input_file):
-    """
-    Convert a Gremlin JSON file to OpenCypher format and save to a new file.
-    
-    Args:
-        input_file (str): Path to the input Gremlin JSON file
-        
-    Returns:
-        bool: True if conversion was successful, False otherwise
-        
-    Raises:
-        FileNotFoundError: If input file doesn't exist
-        json.JSONDecodeError: If input file is not valid JSON
-    """
+def convert_gremlin_to_opencypher(input_file, output_dir=None):
+    """Convert Gremlin JSON to OpenCypher format and save to new file."""
     try:
         # Read the input file
         with open(input_file, 'r') as f:
@@ -136,7 +85,13 @@ def convert_gremlin_to_opencypher(input_file):
         opencypher_data = transform_gremlin_response(gremlin_data)
 
         # Create output filename
-        output_file = os.path.splitext(input_file)[0] + '_converted.json'
+        input_filename = os.path.basename(input_file)
+        output_filename = os.path.splitext(input_filename)[0] + '_converted.json'
+        
+        if output_dir:
+            output_file = os.path.join(output_dir, output_filename)
+        else:
+            output_file = os.path.splitext(input_file)[0] + '_converted.json'
 
         # Write the transformed data
         with open(output_file, 'w') as f:
@@ -149,12 +104,8 @@ def convert_gremlin_to_opencypher(input_file):
         print(f"Error converting file: {str(e)}")
         return False
 
-# Example usage when run as a script
 if __name__ == "__main__":
-    import sys
-    
-    # Use command line argument if provided, otherwise use default
-    input_file = sys.argv[1] if len(sys.argv) > 1 else "src/generate/neptune/gremlin/json/person_gremlin_10.json"
-    
-    # Convert the file
-    convert_gremlin_to_opencypher(input_file) 
+    # Example usage
+    input_file = "src/neptune/gremlin/data/input/person_gremlin_10.json"
+    output_dir = "src/neptune/gremlin/data/output"
+    convert_gremlin_to_opencypher(input_file, output_dir)
