@@ -38,7 +38,7 @@ def convert_to_gremlin():
             
             # Create the node with required fields
             node = {
-                '~id': row['node_id']
+                'id': row['node_id']
             }
             
             # Add all properties from the JSON
