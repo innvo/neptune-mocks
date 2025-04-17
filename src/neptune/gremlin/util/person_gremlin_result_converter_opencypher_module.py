@@ -35,6 +35,15 @@ def clean_properties(properties):
 
 def transform_gremlin_response(response):
     """Transform raw Neptune response to OpenCypher-style JSON."""
+    # Handle count-based response
+    if 'results' in response and isinstance(response['results'], list):
+        for result in response['results']:
+            if 'count' in result:
+                count_value = result['count']
+                if isinstance(count_value, dict) and '@type' in count_value and '@value' in count_value:
+                    return {"results": [{"count": count_value['@value']}]}
+    
+    # Handle vertex-based response
     raw_results = response.get('result', {}).get('data', {}).get('@value', [])
     transformed_results = []
 
