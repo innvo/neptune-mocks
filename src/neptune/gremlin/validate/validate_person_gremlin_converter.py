@@ -8,7 +8,8 @@ def test_conversion():
     current_dir = os.path.dirname(os.path.abspath(__file__))
     
     # Construct the paths
-    input_file = os.path.join(current_dir, '..', 'data', 'input', 'person_gremlin_10.json')
+    #input_file = os.path.join(current_dir, '..', 'data', 'input', 'person_gremlin_10.json')
+    input_file = os.path.join(current_dir, '..', 'data', 'input', 'person_count_gremlin.json')
     output_dir = os.path.join(current_dir, '..', 'data', 'output')
     
     # Ensure output directory exists
