@@ -41,17 +41,18 @@ def generate_name_list(first_name, last_name):
     return [{"NAME_FULL": name["NAME_FULL"].upper(), "COUNT": name["COUNT"]} for name in name_list]
 
 def generate_birth_date_list(birth_date):
-    """Generate variations of a birth date, all in YYYY-MM-DD format"""
+    """Generate variations of a birth date, with slight variations"""
     date_obj = datetime.strptime(birth_date, '%Y-%m-%d')
-    date_list = [
-        birth_date,  # YYYY-MM-DD
-        date_obj.strftime('%Y-%m-%d'),  # YYYY-MM-DD
-        date_obj.strftime('%Y-%m-%d'),  # YYYY-MM-DD
-        date_obj.strftime('%Y-%m-%d'),  # YYYY-MM-DD
-        date_obj.strftime('%Y-%m-%d'),  # YYYY-MM-DD
-        date_obj.strftime('%Y-%m-%d')  # YYYY-MM-DD
+    # Create variations by adding/subtracting a few days
+    variations = [
+        date_obj,  # Original date
+        date_obj + timedelta(days=1),  # +1 day
+        date_obj - timedelta(days=1),  # -1 day
+        date_obj + timedelta(days=2),  # +2 days
+        date_obj - timedelta(days=2),  # -2 days
+        date_obj + timedelta(days=3)   # +3 days
     ]
-    return [date.upper() for date in date_list]
+    return [date.strftime('%Y-%m-%d').upper() for date in variations]
 
 def create_node_properties():
     # Generate primary name components
