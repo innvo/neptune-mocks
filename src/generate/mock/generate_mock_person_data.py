@@ -31,14 +31,14 @@ NODE_TYPES = ['person']
 def generate_name_list(first_name, last_name):
     """Generate variations of a person's name"""
     name_list = [
-        {"NAME_FULL": f"{first_name} {last_name}", "NAME_TYPE": "PRIMARY"},
-        {"NAME_FULL": f"{last_name}, {first_name}", "NAME_TYPE": "PRIMARY"},
-        {"NAME_FULL": f"{first_name[0]}. {last_name}", "NAME_TYPE": "PRIMARY"},
-        {"NAME_FULL": f"{last_name}, {first_name[0]}.", "NAME_TYPE": "PRIMARY"},
-        {"NAME_FULL": f"{first_name} {last_name[0]}.", "NAME_TYPE": "PRIMARY"},
-        {"NAME_FULL": f"{last_name[0]}. {first_name}", "NAME_TYPE": "PRIMARY"}
+        {"NAME_FULL": f"{first_name} {last_name}", "COUNT": 2},
+        {"NAME_FULL": f"{last_name}, {first_name}", "COUNT": 2},
+        {"NAME_FULL": f"{first_name[0]}. {last_name}", "COUNT": 2},
+        {"NAME_FULL": f"{last_name}, {first_name[0]}.", "COUNT": 2},
+        {"NAME_FULL": f"{first_name} {last_name[0]}.", "COUNT": 2},
+        {"NAME_FULL": f"{last_name[0]}. {first_name}", "COUNT": 2}
     ]
-    return [{"NAME_FULL": name["NAME_FULL"].upper(), "NAME_TYPE": name["NAME_TYPE"]} for name in name_list]
+    return [{"NAME_FULL": name["NAME_FULL"].upper(), "COUNT": name["COUNT"]} for name in name_list]
 
 def generate_birth_date_list(birth_date):
     """Generate variations of a birth date, all in YYYY-MM-DD format"""
