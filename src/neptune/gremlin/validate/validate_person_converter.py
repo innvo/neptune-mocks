@@ -1,4 +1,4 @@
-from neptune_gremlin_converter import convert_gremlin_to_opencypher
+from person_converter import convert_gremlin_to_opencypher
 import os
 
 # Get the current directory
