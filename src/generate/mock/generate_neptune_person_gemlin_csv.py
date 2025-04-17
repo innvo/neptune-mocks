@@ -38,7 +38,7 @@ def convert_to_gremlin():
             
             # Create the node with required fields
             node = {
-                '~id': row['node_id']
+                'id': row['node_id']
             }
             
             # Add all properties from the JSON
@@ -46,8 +46,8 @@ def convert_to_gremlin():
                 if isinstance(value, list):
                     # Convert list to string representation with semicolons for each element
                     if key.lower() == 'name_list':
-                        # Convert all names to uppercase
-                        value = [v.upper() for v in value]
+                        # Convert all names to uppercase and remove commas
+                        value = [v.upper().replace(',', '') for v in value]
                         # Format name list with semicolons
                         node['name_full_list:String[]'] = ';'.join(str(v) for v in value)
                         continue
