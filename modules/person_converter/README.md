@@ -5,7 +5,7 @@ A Python utility to convert Neptune Gremlin results to OpenCypher format.
 ## Installation
 
 ```bash
-pip install person-converter
+pip install -e ./modules/person_converter
 ```
 
 ## Usage
