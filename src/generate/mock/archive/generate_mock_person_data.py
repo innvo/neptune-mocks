@@ -127,14 +127,11 @@ def generate_mock_person_data():
                 # "EMAIL": email
             }
             
-            # Convert to JSON string
-            node_properties_json = json.dumps(node_properties)
-            
             # Add to data list
             data.append({
                 'node_id': row['node_id'],
                 'node_name': full_name,
-                'node_properties': node_properties_json
+                'node_properties': json.dumps(node_properties)  # Convert to JSON string
             })
         
         # Convert to DataFrame
@@ -142,7 +139,7 @@ def generate_mock_person_data():
         
         # Save to CSV in data/output directory
         output_path = 'src/data/output/gds/mock_person_data.csv'
-        df.to_csv(output_path, index=False)
+        df.to_csv(output_path, index=False, quoting=1)  # Use quoting=1 to properly escape JSON
         
         # Print sample record
         print("\nSample Record:")
