@@ -10,6 +10,59 @@ def validate_node_existence(node_df, node_id):
     """Validate that a node exists in the node_data.csv"""
     return node_id in node_df['node_id'].values
 
+def validate_referential_integrity(edges, node_df):
+    """Validate referential integrity of edges against node data"""
+    validation_results = {
+        'total_edges': len(edges),
+        'valid_edges': 0,
+        'invalid_edges': 0,
+        'missing_from_nodes': set(),
+        'missing_to_nodes': set(),
+        'edge_type_stats': {},
+        'node_type_stats': {
+            'person': {'total': 0, 'valid': 0},
+            'name': {'total': 0, 'valid': 0}
+        }
+    }
+    
+    # Get sets of valid node IDs for quick lookup
+    valid_node_ids = set(node_df['node_id'].values)
+    person_node_ids = set(node_df[node_df['node_type'] == 'person']['node_id'].values)
+    name_node_ids = set(node_df[node_df['node_type'] == 'name']['node_id'].values)
+    
+    for edge in edges:
+        from_node = edge['node_id_from']
+        to_node = edge['node_id_to']
+        edge_type = edge['edge_type']
+        
+        # Count edge types
+        validation_results['edge_type_stats'][edge_type] = validation_results['edge_type_stats'].get(edge_type, 0) + 1
+        
+        # Validate node existence
+        from_node_exists = from_node in valid_node_ids
+        to_node_exists = to_node in valid_node_ids
+        
+        # Validate node types
+        from_node_is_person = from_node in person_node_ids
+        to_node_is_name = to_node in name_node_ids
+        
+        if from_node_exists and to_node_exists and from_node_is_person and to_node_is_name:
+            validation_results['valid_edges'] += 1
+            validation_results['node_type_stats']['person']['valid'] += 1
+            validation_results['node_type_stats']['name']['valid'] += 1
+        else:
+            validation_results['invalid_edges'] += 1
+            if not from_node_exists or not from_node_is_person:
+                validation_results['missing_from_nodes'].add(from_node)
+            if not to_node_exists or not to_node_is_name:
+                validation_results['missing_to_nodes'].add(to_node)
+    
+    # Update total counts
+    validation_results['node_type_stats']['person']['total'] = len(person_node_ids)
+    validation_results['node_type_stats']['name']['total'] = len(name_node_ids)
+    
+    return validation_results
+
 def generate_person_name_edges():
     try:
         start_time = time.time()
@@ -72,12 +125,29 @@ def generate_person_name_edges():
         # Calculate processing time
         processing_time = time.time() - start_time
         
-        # Print warning if any missing nodes were found
-        if missing_nodes:
-            print(f"\nWarning: Found {len(missing_nodes)} nodes referenced in edges that don't exist in node_data.csv")
-            print("These edges were not created to maintain referential integrity.")
+        # Validate referential integrity
+        validation_results = validate_referential_integrity(edges, node_df)
         
-        # Print detailed edge statistics
+        # Print validation results
+        print("\nReferential Integrity Validation Results:")
+        print(f"Total edges generated: {validation_results['total_edges']}")
+        print(f"Valid edges: {validation_results['valid_edges']}")
+        print(f"Invalid edges: {validation_results['invalid_edges']}")
+        
+        if validation_results['missing_from_nodes']:
+            print(f"\nMissing or invalid person nodes: {len(validation_results['missing_from_nodes'])}")
+            print("Sample of missing person nodes:", list(validation_results['missing_from_nodes'])[:5])
+        
+        if validation_results['missing_to_nodes']:
+            print(f"\nMissing or invalid name nodes: {len(validation_results['missing_to_nodes'])}")
+            print("Sample of missing name nodes:", list(validation_results['missing_to_nodes'])[:5])
+        
+        print("\nNode Type Statistics:")
+        for node_type, stats in validation_results['node_type_stats'].items():
+            print(f"\n{node_type.capitalize()} Nodes:")
+            print(f"  Total: {stats['total']}")
+            print(f"  Used in valid edges: {stats['valid']}")
+        
         print("\nEdge Generation Statistics:")
         print(f"Total number of person_name edges generated: {edge_type_count}")
         print(f"Processing time: {processing_time:.2f} seconds")
