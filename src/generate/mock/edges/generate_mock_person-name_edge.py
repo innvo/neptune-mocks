@@ -47,9 +47,10 @@ def generate_person_name_edges():
         for _, person in tqdm(person_nodes.iterrows(), total=len(person_nodes), desc="Processing person nodes"):
             person_id = person['node_id']
             
-            # Person to Name edges
+            # Ensure each person has at least 1 name edge
             num_name_edges = random.randint(1, min(3, len(name_nodes)))
             selected_names = name_nodes.sample(n=num_name_edges)
+            
             for _, name in selected_names.iterrows():
                 name_id = name['node_id']
                 if validate_node_existence(node_df, name_id):
@@ -62,25 +63,11 @@ def generate_person_name_edges():
                     edge_type_count += 1
                 else:
                     missing_nodes.add(name_id)
-            
-            # Save progress periodically
-            if len(edges) >= 10000:
-                # Ensure output directory exists
-                os.makedirs('src/data/output/gds', exist_ok=True)
-                with open('src/data/output/gds/mock_person-name_data.json', 'a') as f:
-                    for edge in edges:
-                        json.dump(edge, f)
-                        f.write('\n')
-                edges = []  # Clear the list after saving
         
-        # Save any remaining edges
-        if edges:
-            # Ensure output directory exists
-            os.makedirs('src/data/output/gds', exist_ok=True)
-            with open('src/data/output/gds/mock_person-name_data.json', 'a') as f:
-                for edge in edges:
-                    json.dump(edge, f)
-                    f.write('\n')
+        # Save all edges as a single JSON array
+        os.makedirs('src/data/output/gds', exist_ok=True)
+        with open('src/data/output/gds/mock_person-name_data.json', 'w') as f:
+            json.dump(edges, f, indent=2)
         
         # Calculate processing time
         processing_time = time.time() - start_time
@@ -98,8 +85,8 @@ def generate_person_name_edges():
         
         # Read the final edge file to get the complete DataFrame
         with open('src/data/output/gds/mock_person-name_data.json', 'r') as f:
-            edges = [json.loads(line) for line in f]
-        final_edge_df = pd.DataFrame(edges)
+            edges_data = json.load(f)
+        final_edge_df = pd.DataFrame(edges_data)
         return final_edge_df
         
     except Exception as e:
