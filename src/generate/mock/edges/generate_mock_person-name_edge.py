@@ -5,6 +5,15 @@ from tqdm import tqdm
 import time
 import os
 import json
+import platform
+import subprocess
+
+def clear_terminal():
+    """Clear the terminal screen based on the operating system"""
+    if platform.system() == 'Windows':
+        os.system('cls')
+    else:
+        os.system('clear')
 
 def validate_node_existence(node_df, node_id):
     """Validate that a node exists in the node_data.csv"""
@@ -22,13 +31,18 @@ def validate_referential_integrity(edges, node_df):
         'node_type_stats': {
             'person': {'total': 0, 'valid': 0},
             'name': {'total': 0, 'valid': 0}
-        }
+        },
+        'edges_per_person': {}  # New field to track edges per person
     }
     
     # Get sets of valid node IDs for quick lookup
     valid_node_ids = set(node_df['node_id'].values)
     person_node_ids = set(node_df[node_df['node_type'] == 'person']['node_id'].values)
     name_node_ids = set(node_df[node_df['node_type'] == 'name']['node_id'].values)
+    
+    # Initialize edges_per_person counter
+    for person_id in person_node_ids:
+        validation_results['edges_per_person'][person_id] = 0
     
     for edge in edges:
         from_node = edge['node_id_from']
@@ -50,6 +64,7 @@ def validate_referential_integrity(edges, node_df):
             validation_results['valid_edges'] += 1
             validation_results['node_type_stats']['person']['valid'] += 1
             validation_results['node_type_stats']['name']['valid'] += 1
+            validation_results['edges_per_person'][from_node] += 1
         else:
             validation_results['invalid_edges'] += 1
             if not from_node_exists or not from_node_is_person:
@@ -65,6 +80,7 @@ def validate_referential_integrity(edges, node_df):
 
 def generate_person_name_edges():
     try:
+        clear_terminal()
         start_time = time.time()
         
         # Read node_data.csv, excluding node_name column
@@ -142,11 +158,21 @@ def generate_person_name_edges():
         # Validate referential integrity
         validation_results = validate_referential_integrity(edges, node_df)
         
+        clear_terminal()
         # Print validation results
         print("\nReferential Integrity Validation Results:")
         print(f"Total edges generated: {validation_results['total_edges']}")
         print(f"Valid edges: {validation_results['valid_edges']}")
         print(f"Invalid edges: {validation_results['invalid_edges']}")
+        
+        # Calculate and display edges per person distribution
+        edges_per_person_dist = {}
+        for person_id, count in validation_results['edges_per_person'].items():
+            edges_per_person_dist[count] = edges_per_person_dist.get(count, 0) + 1
+        
+        print("\nDistribution of Name Edges per Person:")
+        for count in sorted(edges_per_person_dist.keys()):
+            print(f"Persons with {count} name edges: {edges_per_person_dist[count]}")
         
         if validation_results['missing_from_nodes']:
             print(f"\nMissing or invalid person nodes: {len(validation_results['missing_from_nodes'])}")
