@@ -94,6 +94,7 @@ def generate_person_name_edges():
         edges = []
         missing_nodes = set()
         edge_type_count = 0
+        name_type_stats = {'PRIMARY': 0, 'OTHER': 0, 'ALIAS': 0}
         
         # Generate edges for each person with progress bar
         print("\nGenerating person_name edges...")
@@ -104,16 +105,29 @@ def generate_person_name_edges():
             num_name_edges = random.randint(1, min(3, len(name_nodes)))
             selected_names = name_nodes.sample(n=num_name_edges)
             
+            # First name is always PRIMARY
+            first_name = True
             for _, name in selected_names.iterrows():
                 name_id = name['node_id']
                 if validate_node_existence(node_df, name_id):
+                    # Determine name type
+                    if first_name:
+                        name_type = 'PRIMARY'
+                        first_name = False
+                    else:
+                        name_type = random.choice(['OTHER', 'ALIAS'])
+                    
                     edges.append({
                         'edge_id': str(uuid.uuid4()),
                         'node_id_from': person_id,
                         'node_id_to': name_id,
-                        'edge_type': 'person_name'
+                        'edge_type': 'person_name',
+                        'edge_properties': {
+                            'NAME_TYPE': name_type
+                        }
                     })
                     edge_type_count += 1
+                    name_type_stats[name_type] += 1
                 else:
                     missing_nodes.add(name_id)
         
@@ -147,6 +161,10 @@ def generate_person_name_edges():
             print(f"\n{node_type.capitalize()} Nodes:")
             print(f"  Total: {stats['total']}")
             print(f"  Used in valid edges: {stats['valid']}")
+        
+        print("\nName Type Statistics:")
+        for name_type, count in name_type_stats.items():
+            print(f"{name_type}: {count} edges")
         
         print("\nEdge Generation Statistics:")
         print(f"Total number of person_name edges generated: {edge_type_count}")
