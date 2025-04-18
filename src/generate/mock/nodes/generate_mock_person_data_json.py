@@ -6,6 +6,8 @@ import json
 from faker import Faker
 from tqdm import tqdm
 import os
+import time
+import platform
 
 # Initialize Faker
 fake = Faker()
@@ -27,6 +29,49 @@ if NUM_RECORDS == 0:
     exit()
 
 NODE_TYPES = ['person']
+
+def clear_terminal():
+    """Clear the terminal screen"""
+    if platform.system() == 'Windows':
+        os.system('cls')
+    else:
+        os.system('clear')
+
+def validate_referential_integrity(person_data, node_df):
+    """Validate referential integrity of person data against node data"""
+    validation_results = {
+        'total_persons': len(person_data),
+        'valid_persons': 0,
+        'invalid_persons': 0,
+        'missing_nodes': set(),
+        'node_type_stats': {
+            'person': {'total': 0, 'valid': 0}
+        }
+    }
+    
+    # Get sets of valid node IDs for quick lookup
+    valid_node_ids = set(node_df['node_id'].values)
+    person_node_ids = set(node_df[node_df['node_type'] == 'person']['node_id'].values)
+    
+    for person_entry in person_data:
+        node_id = person_entry['node_id']
+        
+        # Validate node existence and type
+        node_exists = node_id in valid_node_ids
+        is_person_node = node_id in person_node_ids
+        
+        if node_exists and is_person_node:
+            validation_results['valid_persons'] += 1
+            validation_results['node_type_stats']['person']['valid'] += 1
+        else:
+            validation_results['invalid_persons'] += 1
+            if not node_exists or not is_person_node:
+                validation_results['missing_nodes'].add(node_id)
+    
+    # Update total counts
+    validation_results['node_type_stats']['person']['total'] = len(person_node_ids)
+    
+    return validation_results
 
 def generate_name_list(first_name, last_name):
     """Generate variations of a person's name"""
@@ -78,6 +123,11 @@ def create_node_properties():
 def generate_mock_person_data():
     """Generate mock person data with realistic properties"""
     try:
+        # Clear terminal at start
+        clear_terminal()
+        
+        start_time = time.time()
+        
         # Initialize Faker
         fake = Faker()
         
@@ -85,9 +135,20 @@ def generate_mock_person_data():
         print("Reading node data...")
         node_df = pd.read_csv('src/data/input/node_data.csv')
         
+        # Print node type statistics
+        print("\nNode Type Statistics:")
+        print(f"Total number of nodes: {len(node_df)}")
+        node_counts = node_df['node_type'].value_counts()
+        for node_type, count in node_counts.items():
+            print(f"{node_type}: {count} nodes")
+        
         # Filter for person nodes
         person_nodes = node_df[node_df['node_type'] == 'person']
         print(f"Found {len(person_nodes)} person nodes")
+        
+        if person_nodes.empty:
+            print("Warning: No person nodes found in node_data.csv")
+            return None
         
         # Initialize data list
         data = []
@@ -119,29 +180,56 @@ def generate_mock_person_data():
             data.append({
                 'node_id': row['node_id'],
                 'node_name': full_name,
-                'node_properties': node_properties  # Store as dictionary instead of JSON string
+                'node_properties': node_properties
             })
         
         # Save to JSON file
         output_path = 'src/data/output/gds/mock_person_data.json'
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
         with open(output_path, 'w') as f:
             json.dump(data, f, indent=2)
         
-        # Print sample record
-        print("\nSample Record:")
-        sample = data[0]
-        print(json.dumps(sample, indent=2))
+        # Calculate processing time
+        processing_time = time.time() - start_time
         
-        print(f"\nGenerated {len(data)} person records")
-        print(f"Saved to {output_path}")
-        return True
+        # Validate referential integrity
+        validation_results = validate_referential_integrity(data, node_df)
+        
+        # Print validation results
+        print("\nReferential Integrity Validation Results:")
+        print(f"Total persons generated: {validation_results['total_persons']}")
+        print(f"Valid persons: {validation_results['valid_persons']}")
+        print(f"Invalid persons: {validation_results['invalid_persons']}")
+        
+        if validation_results['missing_nodes']:
+            print(f"\nMissing or invalid person nodes: {len(validation_results['missing_nodes'])}")
+            print("Sample of missing person nodes:", list(validation_results['missing_nodes'])[:5])
+        
+        print("\nNode Type Statistics:")
+        for node_type, stats in validation_results['node_type_stats'].items():
+            print(f"\n{node_type.capitalize()} Nodes:")
+            print(f"  Total: {stats['total']}")
+            print(f"  Used in valid persons: {stats['valid']}")
+        
+        print("\nPerson Data Generation Statistics:")
+        print(f"Total number of person nodes processed: {len(data)}")
+        print(f"Processing time: {processing_time:.2f} seconds")
+        print(f"Persons per second: {len(data) / processing_time:.2f}")
+        print(f"Data saved to: {output_path}")
+        
+        return data
         
     except Exception as e:
         print(f"Error generating mock person data: {str(e)}")
-        return False
+        return None
 
 if __name__ == "__main__":
-    generate_mock_person_data()
+    # Clear terminal before starting
+    clear_terminal()
+    person_data = generate_mock_person_data()
+    if person_data is not None:
+        print("\nSample of Generated Person Data:")
+        print(json.dumps(person_data[:5], indent=2))
 
 def generate_node_data():
     # Initialize Faker
