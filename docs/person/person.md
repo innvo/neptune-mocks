@@ -6,18 +6,22 @@ node
 
 *   Arrays must be enclosed by " and delimited by ;
 
-| neptune | LPG V11 | GDS | Notes |
+| neptune | LPG V11 | GDS \* JSON NODE\_PROPERTIES | Notes |
 | --- | --- | --- | --- |
 | ~id | NODE\_ID | NODE\_ID | GUID |
 | name\_full:String | NODE\_NAME | NODE\_NAME |   |
-| name\_full\_list:String\[\] | NAME\_FULL\_LIST:NAME\_FULL | NODE\_PROPERTIES-NAME\_FULL\_LIST:NAME\_FULL  
-NODE\_PROPERTIES-NAME\_FULL\_LIST:COUNT | MVP not planning to implement COUNT for neptune due to array complexity |
+| name\_full\_list:String\[\] | NAME\_FULL\_LIST:NAME\_FULL | NAME\_FULL\_LIST:NAME\_FULL  
+NAME\_FULL\_LIST:COUNT | MVP not planning to implement COUNT for neptune due to array complexity |
 | name\_full\_alias:String\[\] | NAME\_FULL\_ALIAS\_LIST:NAME\_FULL  
-NAME\_FULL\_ALIAS\_LIST:NAME\_TYPE |   | MVP not planning to implement NAME\_TYPE for neptune due to array complexity |
+NAME\_FULL\_ALIAS\_LIST:NAME\_TYPE | NAME\_FULL\_ALIAS\_LIST:NAME\_FULL  
+NAME\_FULL\_ALIAS\_LIST:NAME\_TYPE | MVP not planning to implement NAME\_TYPE for neptune due to array complexity |
 |   | NAME\_LIST:NAME\_FIRST  
 NAME\_LIST:NAME\_MIDDLE  
 NAME\_LIST:NAME\_LAST  
-NAME\_LIST:NAME\_TYPE |   | MVP not planning to implement NAME\_LIST all names will be NAME\_FULL format |
+NAME\_LIST:NAME\_TYPE | NAME\_LIST:NAME\_FIRST  
+NAME\_LIST:NAME\_MIDDLE  
+NAME\_LIST:NAME\_LAST  
+NAME\_LIST:NAME\_TYPE | MVP not planning to implement NAME\_LIST all names will be NAME\_FULL format |
 | role\_type\_list:String\[\] | ROLE\_TYPE\_LIST:ROLE\_TYPE  
 ROLE\_TYPE\_LIST:ROLE\_COUNT | ROLE\_TYPE\_LIST:ROLE\_TYPE  
 ROLE\_TYPE\_LIST:COUNT | MVP not planning to implement COUNT for neptune due to array complexity |
