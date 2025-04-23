@@ -1,3 +1,13 @@
+# Prerquistes
+1. Install python dependencies
+```
+pip install -r requirements.txt
+```
+2. Install mermaid dependencies
+```
+
+```
+
 # Infrastructure
 1. Accessing AWS Neptune requires a SSH Tunnel
 2. AWS Neptune requires:
