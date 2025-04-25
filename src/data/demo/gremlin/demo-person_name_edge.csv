@@ -1,0 +1,2 @@
+~id,node_id_from:String,node_id_to:String,edge_name:String,name_type:String,~label
+ca85349d-7318-4eba-8383-49ee7444ab75,gdsr5-17749540,f8b86420ae0a3e3f8795098e590da3fe4a8260ee62302dbe5f33d04cd4b7932b,isAssociatedWithName,PRIMARY,person_name
