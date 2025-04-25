@@ -1,0 +1,2 @@
+~id,node_name:String,name_full_list:String[],~label
+n1, JOHN SMITH ,JOHN SMITH,name
