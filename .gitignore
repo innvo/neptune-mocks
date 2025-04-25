@@ -36,6 +36,7 @@ ENV/
 data/output/
 *.csv
 !src/data/demo/*.csv
+!src/data/demo/gremlin/*.csv
 
 # OS specific
 .DS_Store
