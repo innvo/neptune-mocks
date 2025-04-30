@@ -1586,6 +1586,9 @@
             <mxPoint x="-19" y="11" as="offset" />
           </mxGeometry>
         </mxCell>
+        <mxCell id="EBtIrYNbmqP0xNwAyRmD-5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="5HKCHKPL3S8GJBEBOUlb-1" source="5HKCHKPL3S8GJBEBOUlb-162" target="EBtIrYNbmqP0xNwAyRmD-2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
         <mxCell id="5HKCHKPL3S8GJBEBOUlb-162" value="python AWS boto3" style="outlineConnect=0;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;shape=mxgraph.aws3.android;fillColor=#FFD44F;gradientColor=none;" vertex="1" parent="5HKCHKPL3S8GJBEBOUlb-1">
           <mxGeometry x="58.25" y="380" width="53.5" height="53" as="geometry" />
         </mxCell>
@@ -1673,8 +1676,8 @@
         <mxCell id="EBtIrYNbmqP0xNwAyRmD-1" value="" style="sketch=0;verticalLabelPosition=bottom;sketch=0;aspect=fixed;html=1;verticalAlign=top;strokeColor=none;fillColor=#000000;align=center;outlineConnect=0;pointerEvents=1;shape=mxgraph.citrix2.authentication_oidc;" vertex="1" parent="5HKCHKPL3S8GJBEBOUlb-1">
           <mxGeometry x="780" y="520" width="50" height="50" as="geometry" />
         </mxCell>
-        <mxCell id="EBtIrYNbmqP0xNwAyRmD-2" value="" style="sketch=0;verticalLabelPosition=bottom;sketch=0;aspect=fixed;html=1;verticalAlign=top;strokeColor=none;fillColor=#000000;align=center;outlineConnect=0;pointerEvents=1;shape=mxgraph.citrix2.authentication_oidc;" vertex="1" parent="5HKCHKPL3S8GJBEBOUlb-1">
-          <mxGeometry x="350" y="499.5" width="50" height="50" as="geometry" />
+        <mxCell id="EBtIrYNbmqP0xNwAyRmD-2" value="ICAM OIDC (Authentication)" style="sketch=0;verticalLabelPosition=bottom;sketch=0;aspect=fixed;html=1;verticalAlign=top;strokeColor=none;fillColor=#000000;align=center;outlineConnect=0;pointerEvents=1;shape=mxgraph.citrix2.authentication_oidc;" vertex="1" parent="5HKCHKPL3S8GJBEBOUlb-1">
+          <mxGeometry x="320" y="618" width="50" height="50" as="geometry" />
         </mxCell>
         <mxCell id="EBtIrYNbmqP0xNwAyRmD-3" value="" style="sketch=0;verticalLabelPosition=bottom;sketch=0;aspect=fixed;html=1;verticalAlign=top;strokeColor=none;fillColor=#000000;align=center;outlineConnect=0;pointerEvents=1;shape=mxgraph.citrix2.authentication_oidc;" vertex="1" parent="5HKCHKPL3S8GJBEBOUlb-1">
           <mxGeometry x="780" y="520" width="50" height="50" as="geometry" />
