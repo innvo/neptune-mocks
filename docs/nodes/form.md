@@ -13,7 +13,7 @@ node
 | form\_number:String | FORM\_NUMBER | {FORM.NUMBER} |   |
 | receipt\_date\_estimated:Date | RECEIPT\_DATE\_ESTIMATED | {RECEIPT\_DATE\_ESTIMATED} |   |
 | status:String | STATUS | {STATUS} |   |
-| principal\_application\_receipt\_number:String | PRINCIPAL\_APPLICANT\_RECEIPT\_NUMBER | {PRINCIPAL\_APPLICANT\_RECEIPT\_NUMBER} |   |
+| principal\_applicant\_receipt\_number:String | PRINCIPAL\_APPLICANT\_RECEIPT\_NUMBER | {PRINCIPAL\_APPLICANT\_RECEIPT\_NUMBER} |   |
 | source\_table:String | SOURCE\_TABLE | {SOURCE\_TABLE} |   |
 | source\_id:String | SOURCE\_ID | {SOURCE\_ID) |   |
 | ~label | NODE\_TYPE | NODE\_TYPE | form |

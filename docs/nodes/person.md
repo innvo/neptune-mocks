@@ -13,7 +13,7 @@ node
 | name\_full:String | NODE\_NAME | NODE\_NAME |   |
 | name\_full\_list:String\[\] | NAME\_FULL\_LIST:NAME\_FULL, NAME\_FULL\_LIST:COUNT | NAME\_FULL\_LIST:\[{NAME\_FULL, NAME\_FULL\_LIST:COUNT}\] | MVP not planning to implement COUNT for neptune due to array complexity |
 | name\_full\_alias:String\[\] | NAME\_FULL\_ALIAS\_LIST:NAME\_FULL, NAME\_FULL\_ALIAS\_LIST:NAME\_TYPE | NAME\_FULL\_ALIAS\_LIST:\[{NAME\_FULL, NAME\_FULL\_ALIAS\_LIST:NAME\_TYPE}\] | MVP not planning to implement NAME\_TYPE for neptune due to array complexity |
-|   | NAME\_LIST:NAME\_FIRST, NAME\_LIST:NAME\_MIDDLE, NAME\_LIST:NAME\_LAST, NAME\_LIST:NAME\_TYPE | NAME\_LIST:\[{NAME\_FIRST, NAME\_LIST:NAME\_MIDDLE, NAME\_LIST:NAME\_LAST, NAME\_LIST:NAME\_TYPE}\] | MVP not planning to implement NAME\_LIST all names will be NAME\_FULL |
+| name\_list:String\[\] | NAME\_LIST:NAME\_FIRST, NAME\_LIST:NAME\_MIDDLE, NAME\_LIST:NAME\_LAST, NAME\_LIST:NAME\_TYPE | NAME\_LIST:\[{NAME\_FIRST, NAME\_LIST:NAME\_MIDDLE, NAME\_LIST:NAME\_LAST, NAME\_LIST:NAME\_TYPE}\] | N\_F:JOHN|N\_M:DAVID|N\_L:SMITH|N\_T:PRIMARY; N\_F:JON|N\_L:SMITH|N\_T:PRIMARY |
 | role\_type\_list:String\[\] | ROLE\_TYPE\_LIST:ROLE\_TYPE, ROLE\_TYPE\_LIST:ROLE\_COUNT | ROLE\_TYPE\_LIST:\[{ROLE\_TYPE, ROLE\_TYPE\_LIST:ROLE\_COUNT}\] | ROLE\_TYPE\_LIST:ROLE\_COUNT |
 | birth\_date:Date | BIRTH\_DATE | BIRTH\_DATE |   |
 | birth\_date\_list:Date\[\] | BIRTH\_DATE\_LIST | BIRTH\_DATE\_LIST |   |
