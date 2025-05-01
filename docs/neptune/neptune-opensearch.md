@@ -12,6 +12,7 @@ Existing Neptune Cluster (Source)
 *   subnets: all sts-deam\* subnets
 *   security group: sts-deam-neptune\*
 
+
 Open Search Domain (Target)
 
 1.  https://search-deam-gds-neptune-i6kvsohzrlv6xie2azrtp7c3iu.aos.us-east-1.on.aws
@@ -21,7 +22,8 @@ Open Search Domain (Target)
 5.  IAM Role: sts-deam-opensearch-fullaccess
 6.  1 AZ, General Purpsoe, t3.small.search, data nodes 1
 7.  Version 2.19
-8.  Fine-grained access control = Set IAM ARN as master user
+8.  Access: public
+9.  Fine-grained access control = Set IAM ARN as master user
     1.  arn:aws:iam::244081531951:role/sts-deam-opensearch-fullaccess
     2.  Require credentials (admin user/password or SigV4 signed requests).
 
