@@ -20,6 +20,10 @@ pip install -r requirements.txt
 ```
 ssh  -L 8182:neptune-dev.cluster-cz7fmvtxsrei.us-east-1.neptune.amazonaws.com:8182 -i neptune-bastion-dev.pem ec2-user@35.170.107.253
 
+ssh -L 5601:vpc-sts-deam-gds-dev-3wznyujg7kfe5kl7np7gdgoko4.us-east-1.es.amazonaws.com:443 \
+    -i neptune-bastion-dev.pem ec2-user@35.170.107.253
+
+
 ```
 ### Check Neptune Status
 ```
