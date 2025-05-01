@@ -344,3 +344,9 @@ Copy
 Edit
 sudo systemctl enable docker
 Would you like help setting up aws-es-proxy inside Docker next?
+
+
+aws-es-proxy \
+  -endpoint https://search-deam-gds-neptune-i6kvsohzrlv6xie2azrtp7c3iu.aos.us-east-1.on.aws \
+  -listen 0.0.0.0:5601 \
+  -region us-east-1
