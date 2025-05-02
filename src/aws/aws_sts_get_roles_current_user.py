@@ -17,15 +17,23 @@ try:
     # Extract username from ARN
     username = user_arn.split('/')[-1]
     
-    # Get roles for the user
-    roles = iam.list_attached_user_policies(UserName=username)
+    # Get inline policies
+    inline_policies = iam.list_user_policies(UserName=username)
+    
+    # Get managed policies
+    managed_policies = iam.list_attached_user_policies(UserName=username)
     
     # Print the results
     print("Authentication successful!")
     print(f"User ARN: {user_arn}")
     print(f"Account: {response['Account']}")
-    print("\nAttached Roles/Policies:")
-    for policy in roles['AttachedPolicies']:
+    
+    print("\nInline Policies:")
+    for policy in inline_policies['PolicyNames']:
+        print(f"- {policy}")
+    
+    print("\nManaged Policies:")
+    for policy in managed_policies['AttachedPolicies']:
         print(f"- {policy['PolicyName']} (ARN: {policy['PolicyArn']})")
         
 except Exception as e:
