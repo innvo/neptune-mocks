@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 AWS Credentials Troubleshooter
-Helps diagnose and fix common AWS credential issues
+Helps diagnose and fix common AWS credential issues including signature methods
 """
 
 import os
@@ -14,6 +14,15 @@ from pathlib import Path
 import re
 import ntplib
 import boto3
+import hashlib
+import hmac
+import base64
+import urllib.parse
+import requests
+
+def clear_screen():
+    """Clear the terminal screen in a cross-platform way"""
+    os.system('cls' if os.name == 'nt' else 'clear')
 
 def check_time_sync():
     """Check if system time is synchronized with NTP servers"""
@@ -150,7 +159,104 @@ def test_aws_cli(profile=None):
         print(f"Error running AWS CLI: {str(e)}")
         return False
 
+def test_sigv4_signing(profile=None):
+    """Test AWS SigV4 signature calculation with the given profile"""
+    print("\n=== Testing AWS Signature Version 4 (SigV4) ===")
+    print("AWS uses Signature Version 4 (SigV4) for API request authentication")
+    
+    try:
+        # Create session with specific profile if provided
+        if profile:
+            session = boto3.Session(profile_name=profile)
+        else:
+            session = boto3.Session()
+        
+        credentials = session.get_credentials()
+        if not credentials:
+            print("❌ Could not get credentials from session.")
+            return False
+        
+        # Get resolved credentials
+        access_key = credentials.access_key
+        secret_key = credentials.secret_key
+        
+        # Print credentials format (partial)
+        print(f"Access Key ID: {access_key[:4]}...{access_key[-4:]}")
+        print(f"Secret Access Key: {secret_key[:3]}...{secret_key[-3:]}")
+        
+        # Get region
+        region = session.region_name or 'us-east-1'
+        print(f"Region: {region}")
+        
+        # Perform a simple SigV4 signature test with STS
+        service = 'sts'
+        host = f"{service}.{region}.amazonaws.com"
+        endpoint = f"https://{host}"
+        
+        print(f"\nTesting signature with endpoint: {endpoint}")
+        
+        # Get current date for signing
+        amz_date = datetime.datetime.now(datetime.UTC).strftime('%Y%m%dT%H%M%SZ')
+        datestamp = datetime.datetime.now(datetime.UTC).strftime('%Y%m%d')
+        
+        # Create a canonical request
+        method = 'GET'
+        canonical_uri = '/'
+        canonical_querystring = 'Action=GetCallerIdentity&Version=2011-06-15'
+        
+        canonical_headers = f'host:{host}\nx-amz-date:{amz_date}\n'
+        signed_headers = 'host;x-amz-date'
+        
+        payload_hash = hashlib.sha256(b'').hexdigest()
+        
+        canonical_request = f"{method}\n{canonical_uri}\n{canonical_querystring}\n{canonical_headers}\n{signed_headers}\n{payload_hash}"
+        
+        # Create string to sign
+        algorithm = 'AWS4-HMAC-SHA256'
+        credential_scope = f"{datestamp}/{region}/{service}/aws4_request"
+        string_to_sign = f"{algorithm}\n{amz_date}\n{credential_scope}\n{hashlib.sha256(canonical_request.encode('utf-8')).hexdigest()}"
+        
+        # Calculate signature
+        def sign(key, msg):
+            return hmac.new(key, msg.encode('utf-8'), hashlib.sha256).digest()
+        
+        def get_signature_key(key, date_stamp, region_name, service_name):
+            k_date = sign(('AWS4' + key).encode('utf-8'), date_stamp)
+            k_region = sign(k_date, region_name)
+            k_service = sign(k_region, service_name)
+            k_signing = sign(k_service, 'aws4_request')
+            return k_signing
+        
+        signing_key = get_signature_key(secret_key, datestamp, region, service)
+        signature = hmac.new(signing_key, string_to_sign.encode('utf-8'), hashlib.sha256).hexdigest()
+        
+        # Create authorization header
+        authorization_header = f"{algorithm} Credential={access_key}/{credential_scope}, SignedHeaders={signed_headers}, Signature={signature}"
+        
+        # Create headers for request
+        headers = {
+            'Host': host,
+            'X-Amz-Date': amz_date,
+            'Authorization': authorization_header
+        }
+        
+        # Make request
+        request_url = f"{endpoint}?{canonical_querystring}"
+        print("\nSending test request with calculated signature...")
+        response = requests.get(request_url, headers=headers)
+        
+        if response.status_code == 200:
+            print("✓ SigV4 signature test successful!")
+            return True
+        else:
+            print(f"❌ SigV4 signature test failed: {response.status_code} {response.text}")
+            return False
+    except Exception as e:
+        print(f"❌ Error testing SigV4 signature: {str(e)}")
+        return False
+
 def main():
+    clear_screen()
     print("=== AWS Credentials Troubleshooter ===\n")
     
     # Check time synchronization
@@ -164,8 +270,27 @@ def main():
     # Test AWS CLI
     if profile:
         test_aws_cli(profile)
+        
+    # Test SigV4 signing
+    if profile:
+        test_sigv4_signing(profile)
     
     # Additional suggestions
+    print("\n=== AWS Authentication Information ===")
+    print("AWS uses Signature Version 4 (SigV4) for API request authentication.")
+    print("This algorithm uses:")
+    print("1. Your AWS access key ID")
+    print("2. Your AWS secret access key")
+    print("3. The current time (must be within 15 minutes of AWS servers)")
+    print("4. A canonical request format that includes headers and request parameters")
+    
+    print("\n=== Common Causes of SignatureDoesNotMatch Errors ===")
+    print("1. Incorrect or corrupted secret key (most common)")
+    print("2. System clock not synchronized with AWS servers")
+    print("3. Using the wrong region for the request")
+    print("4. Special characters in credentials not properly escaped")
+    print("5. Using different signature versions (AWS4-HMAC-SHA256 is current standard)")
+    
     print("\n=== Additional Suggestions ===")
     print("1. Try setting credentials via environment variables:")
     print("   export AWS_ACCESS_KEY_ID=your_access_key")
@@ -178,6 +303,8 @@ def main():
     print("\n3. Check if your AWS account or IAM user has restrictions (IP-based or MFA required)")
     
     print("\n4. Verify that your credentials haven't been rotated in the AWS console")
+    
+    print("\n5. Regenerate your access keys in the AWS Management Console")
 
 if __name__ == "__main__":
     main()
