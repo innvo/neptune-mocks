@@ -8,7 +8,7 @@ https://github.com/awslabs/aws-sigv4-proxy
 ## Managed Domain
 
 *   endpoint: https://search-sts-deam-es-iam-s5lekmvl3ssmabtrxj74t5aa2i.us-east-1.es.amazonaws.com
-*   access: public\]
+*   access: public\
 *   Fine -grained access control
     *   ,Set IAM ARN as master user:  arn:aws:iam::244081531951:user/echasin
 *   security config:
@@ -48,7 +48,7 @@ docker run --rm -ti \
 
 ### Test Proxy  
 ```  
-curl "http://localhost:8080/_cluster/health?pretty"
+curl "http://localhost:9200/_cluster/health?pretty"
 ```
 
 ## Serverless

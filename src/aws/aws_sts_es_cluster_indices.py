@@ -8,7 +8,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 # OpenSearch endpoint
-# OPENSEARCH_ENDPOINT = 'https://search-sts-deam-es-3z4qexncsuhwmwt2tdyc7cfjyq.us-east-1.es.amazonaws.com'  #User/password
+#OPENSEARCH_ENDPOINT = 'https://search-sts-deam-es-3z4qexncsuhwmwt2tdyc7cfjyq.us-east-1.es.amazonaws.com'  #User/password
 OPENSEARCH_ENDPOINT = 'https://search-sts-deam-es-iam-s5lekmvl3ssmabtrxj74t5aa2i.us-east-1.es.amazonaws.com'  #IAM'
 
 def get_indices(auth):
