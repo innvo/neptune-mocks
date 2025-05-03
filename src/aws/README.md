@@ -2,35 +2,35 @@
 
 ## Signature Proxy
 
-docker run --rm -ti   
-\-e AWS\_ACCESS\_KEY\_ID=AKIATRVDETQXTK3GPWX   
-\-e AWS\_SECRET\_ACCESS\_KEY=ysSfLSbJOORB5N4vt5+oGuzdXg93aXIpHC76h0i5R   
-\-p 8080:8080   
-aws-sigv4-proxy   
-\--name aoss-proxy   
-\--port :8080   
-\--host utrkg13gnjqpmyz93250.us-east-1.aoss.amazonaws.com   
+docker run --rm -ti  
+\-e AWS\_ACCESS\_KEY\_ID=AKIATRVDETQXTK3GPWX  
+\-e AWS\_SECRET\_ACCESS\_KEY=ysSfLSbJOORB5N4vt5+oGuzdXg93aXIpHC76h0i5R  
+\-p 8080:8080  
+aws-sigv4-proxy  
+\--name aoss-proxy  
+\--port :8080  
+\--host utrkg13gnjqpmyz93250.us-east-1.aoss.amazonaws.com  
 \--region us-east-1  
 \--service es  
-\--verbose   
-\--log-signing-process   
+\--verbose  
+\--log-signing-process  
 \--log-failed-requests
 
 # 403 Forbidden
 
-docker run --rm -ti   
-\-e AWS\_ACCESS\_KEY\_ID=AKIATRVDETQXTK3GPWX   
-\-e AWS\_SECRET\_ACCESS\_KEY=ysSfLSbJOORB5N4vt5+oGuzdXg93aXIpHC76h0i5R   
-\-e AWS\_PROFILE=default   
-\-p 8080:8080   
-aws-sigv4-proxy   
-\--name aoss-proxy   
-\--port :8080   
-\--host search-sts-deam-es-iam-s5lekmvl3ssmabtrxj74t5aa2i.us-east-1.es.amazonaws.com   
+docker run --rm -ti  
+\-e AWS\_ACCESS\_KEY\_ID=AKIATRVDETQXTK3GPWX  
+\-e AWS\_SECRET\_ACCESS\_KEY=ysSfLSbJOORB5N4vt5+oGuzdXg93aXIpHC76h0i5R  
+\-e AWS\_PROFILE=default  
+\-p 8080:8080  
+aws-sigv4-proxy  
+\--name aoss-proxy  
+\--port :8080  
+\--host search-sts-deam-es-iam-s5lekmvl3ssmabtrxj74t5aa2i.us-east-1.es.amazonaws.com  
 \--region us-east-1  
 \--service es  
-\--verbose   
-\--log-signing-process   
+\--verbose  
+\--log-signing-process  
 \--log-failed-requests
 
 ## Managed Domain
@@ -75,35 +75,35 @@ docker run --rm -ti \
 -debug
 ```
 
-Test Proxy  
-\`\`\`\`  
-curl -v http://localhost:8080/\_cluster/health?pretty  
-\`\`\`
+### Test Proxy  
+```  
+curl "http://localhost:8080/_cluster/health?pretty"
+```
 
 ```
-docker run --rm -ti   
-\-e AWS\_ACCESS\_KEY\_ID=AKIATRVDETQXTK3GPWX   
-\-e AWS\_SECRET\_ACCESS\_KEY=ysSfLSbJOORB5N4vt5+oGuzdXg93aXIpHC76h0i5R   
-\-e AWS\_PROFILE=default   
-\-p 8080:8080   
+docker run --rm -ti  
+\-e AWS\_ACCESS\_KEY\_ID=AKIATRVDETQXTK3GPWX  
+\-e AWS\_SECRET\_ACCESS\_KEY=ysSfLSbJOORB5N4vt5+oGuzdXg93aXIpHC76h0i5R  
+\-e AWS\_PROFILE=default  
+\-p 8080:8080  
 abutaha/aws-es-proxy  
-\--host search-sts-deam-es-iam-s5lekmvl3ssmabtrxj74t5aa2i.us-east-1.es.amazonaws.com   
-\--port :8080   
-\--verbose   
+\--host search-sts-deam-es-iam-s5lekmvl3ssmabtrxj74t5aa2i.us-east-1.es.amazonaws.com  
+\--port :8080  
+\--verbose  
 \--debug
 
-docker run --rm -ti   
-\-e AWS\_SDK\_LOAD\_CONFIG=true   
-\-e AWS\_PROFILE=default   
-\-p 8080:8080   
-abutaha/aws-es-proxy   
-\-endpoint https://search-sts-deam-es-iam-s5lekmvl3ssmabtrxj74t5aa2i.us-east-1.es.amazonaws.com   
-\-listen 127.0.0.1:8080   
-\-verbose   
-\-debug   
+docker run --rm -ti  
+\-e AWS\_SDK\_LOAD\_CONFIG=true  
+\-e AWS\_PROFILE=default  
+\-p 8080:8080  
+abutaha/aws-es-proxy  
+\-endpoint https://search-sts-deam-es-iam-s5lekmvl3ssmabtrxj74t5aa2i.us-east-1.es.amazonaws.com  
+\-listen 127.0.0.1:8080  
+\-verbose  
+\-debug  
 \-service es
 
-\-e AWS\_SDK\_LOAD\_CONFIG=true   
+\-e AWS\_SDK\_LOAD\_CONFIG=true  
 \-e AWS\_PROFILE=default \\
 
 docker run --rm -ti -v ~/.aws:/root/.aws -p 8080:8080 -e AWS\_SDK\_LOAD\_CONFIG=true -e AWS\_PROFILE=default aws-sigv4-proxy --name es --host search-sts-deam-es-iam-s5lekmvl3ssmabtrxj74t5aa2i.us-east-1.es.amazonaws.com --region us-east-1 --port :8080
@@ -133,8 +133,8 @@ export PATH="$PATH:$(go env GOPATH)/bin"
  Managed Instance
 ```
 
-AWS\_PROFILE=default AWS\_REGION=us-east-1 aws-es-proxy   
-\-endpoint https://search-sts-deam-es-iam-s5lekmvl3ssmabtrxj74t5aa2i.us-east-1.es.amazonaws.com   
+AWS\_PROFILE=default AWS\_REGION=us-east-1 aws-es-proxy  
+\-endpoint https://search-sts-deam-es-iam-s5lekmvl3ssmabtrxj74t5aa2i.us-east-1.es.amazonaws.com  
 \-listen 127.0.0.1:9200
 
 ```
@@ -143,14 +143,14 @@ AWS\_PROFILE=default AWS\_REGION=us-east-1 aws-es-proxy 
  Serverless
 ```
 
-AWS\_REGION=us-east-1 aws-es-proxy   
-\-endpoint https://utrkg13gnjqpmyz93250.us-east-1.aoss.amazonaws.com   
+AWS\_REGION=us-east-1 aws-es-proxy  
+\-endpoint https://utrkg13gnjqpmyz93250.us-east-1.aoss.amazonaws.com  
 \-listen 127.0.0.1:9200
 
 or
 
-AWS\_PROFILE=default AWS\_REGION=us-east-1 aws-es-proxy   
-\-endpoint https://utrkg13gnjqpmyz93250.us-east-1.aoss.amazonaws.com   
+AWS\_PROFILE=default AWS\_REGION=us-east-1 aws-es-proxy  
+\-endpoint https://utrkg13gnjqpmyz93250.us-east-1.aoss.amazonaws.com  
 \-listen 127.0.0.1:9200
 
 ```
