@@ -73,56 +73,51 @@ docker run --rm -ti \
 -listen 0.0.0.0:8080 \
 -verbose \
 -debug
-``
+```
 
+Test Proxy  
+\`\`\`\`  
+curl -v http://localhost:8080/\_cluster/health?pretty  
+\`\`\`
 
+```
+docker run --rm -ti   
+\-e AWS\_ACCESS\_KEY\_ID=AKIATRVDETQXTK3GPWX   
+\-e AWS\_SECRET\_ACCESS\_KEY=ysSfLSbJOORB5N4vt5+oGuzdXg93aXIpHC76h0i5R   
+\-e AWS\_PROFILE=default   
+\-p 8080:8080   
+abutaha/aws-es-proxy  
+\--host search-sts-deam-es-iam-s5lekmvl3ssmabtrxj74t5aa2i.us-east-1.es.amazonaws.com   
+\--port :8080   
+\--verbose   
+\--debug
 
-docker run --rm -ti \
--e AWS_ACCESS_KEY_ID=AKIATRVDETQXTK3GPWX \
--e AWS_SECRET_ACCESS_KEY=ysSfLSbJOORB5N4vt5+oGuzdXg93aXIpHC76h0i5R \
--e AWS_PROFILE=default \
--p 8080:8080 \
-abutaha/aws-es-proxy
---host search-sts-deam-es-iam-s5lekmvl3ssmabtrxj74t5aa2i.us-east-1.es.amazonaws.com \
---port :8080 \
---verbose \
---debug
+docker run --rm -ti   
+\-e AWS\_SDK\_LOAD\_CONFIG=true   
+\-e AWS\_PROFILE=default   
+\-p 8080:8080   
+abutaha/aws-es-proxy   
+\-endpoint https://search-sts-deam-es-iam-s5lekmvl3ssmabtrxj74t5aa2i.us-east-1.es.amazonaws.com   
+\-listen 127.0.0.1:8080   
+\-verbose   
+\-debug   
+\-service es
 
-docker run --rm -ti \
--e AWS_SDK_LOAD_CONFIG=true \
--e AWS_PROFILE=default \
--p 8080:8080 \
-abutaha/aws-es-proxy \
--endpoint https://search-sts-deam-es-iam-s5lekmvl3ssmabtrxj74t5aa2i.us-east-1.es.amazonaws.com \
--listen 127.0.0.1:8080 \
--verbose \
--debug \
--service es
+\-e AWS\_SDK\_LOAD\_CONFIG=true   
+\-e AWS\_PROFILE=default \\
 
-
-  -e AWS_SDK_LOAD_CONFIG=true \
-  -e AWS_PROFILE=default \
-
-
-
-
-
-docker run --rm -ti -v ~/.aws:/root/.aws -p 8080:8080 -e AWS_SDK_LOAD_CONFIG=true -e AWS_PROFILE=default aws-sigv4-proxy --name es --host search-sts-deam-es-iam-s5lekmvl3ssmabtrxj74t5aa2i.us-east-1.es.amazonaws.com --region us-east-1 --port :8080
-
-
-
-
-
+docker run --rm -ti -v ~/.aws:/root/.aws -p 8080:8080 -e AWS\_SDK\_LOAD\_CONFIG=true -e AWS\_PROFILE=default aws-sigv4-proxy --name es --host search-sts-deam-es-iam-s5lekmvl3ssmabtrxj74t5aa2i.us-east-1.es.amazonaws.com --region us-east-1 --port :8080
 
 ## aws-es-proxy
-1. Install go on Macos
-```
+
+1.  Install go on Macos  
+    \`\`\`
 
 brew install go
+```
 
-```
-2. Install proxy locally
-```
+1.  Install proxy locally  
+    \`\`\`
 
 go install github.com/abutaha/aws-es-proxy@latest
 
