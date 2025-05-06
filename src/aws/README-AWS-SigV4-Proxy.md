@@ -103,7 +103,7 @@ curl "http://localhost:9200/_cluster/health?pretty"
 ]
 ```
 
-### Start Proxy for Managed Domain
+### Start Proxy for Serverless
 
 ```
 docker run --rm -ti \
