@@ -13,7 +13,7 @@ OPENSEARCH_ENDPOINT = 'https://utrkg13gnjqpmyz93250.us-east-1.aoss.amazonaws.com
 def get_cluster_health(auth):
     """Get the cluster health from OpenSearch Serverless."""
     logger.info("Retrieving cluster health...")
-    health_url = f"{OPENSEARCH_ENDPOINT}/_cat"
+    health_url = f"{OPENSEARCH_ENDPOINT}/_search"
     
     try:
         # Add required headers for OpenSearch Serverless
