@@ -5,7 +5,7 @@ import json
 import os
 
 # Configuration
-NUM_NODE_RECORDS =200000  # Number of node records to generate
+NUM_NODE_RECORDS =2000000  # Number of node records to generate
 NODE_TYPES = ['person', 'name', 'address', 'anumber', 'receipt', 'form', 'email', 'phone']
 
 # Ensure the data/input directory exists

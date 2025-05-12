@@ -100,6 +100,28 @@ def generate_birth_date_list(birth_date):
     ]
     return [date.strftime('%Y-%m-%d').upper() for date in variations]
 
+def generate_anumber_list():
+    """Generate a list of anumbers (0-3 anumbers per person)"""
+    # Randomly decide how many anumbers this person has (0-3)
+    num_anumbers = random.randint(0, 3)
+    if num_anumbers == 0:
+        return []
+    
+    # Generate the specified number of unique anumbers
+    anumbers = set()
+    while len(anumbers) < num_anumbers:
+        # Generate a 10-digit number as a string
+        anumber = ''.join([str(random.randint(0, 9)) for _ in range(10)])
+        anumbers.add(anumber)
+    
+    return list(anumbers)
+
+def select_primary_anumber(anumber_list):
+    """Select a primary anumber from the anumber list"""
+    if not anumber_list:
+        return None
+    return random.choice(anumber_list)
+
 def create_node_properties():
     # Generate primary name components
     primary_first = fake.first_name()
@@ -112,12 +134,19 @@ def create_node_properties():
     name_full_list = generate_name_list(primary_first, primary_last)
     birth_date_list = generate_birth_date_list(primary_birth_date)
     
+    # Generate anumber list and select primary anumber
+    anumber_list = generate_anumber_list()
+    primary_anumber = select_primary_anumber(anumber_list)
+    
     # Create the properties dictionary
     return {
         'NAME_FULL': f"{primary_first.upper()} {primary_last.upper()}",
         'NAME_FULL_LIST': name_full_list,
         'BIRTH_DATE': primary_birth_date,
-        'BIRTH_DATE_LIST': birth_date_list
+        'BIRTH_DATE_LIST': birth_date_list,
+        'ANUMBER_PRIMARY': primary_anumber,
+        'ANUMBER_LIST': anumber_list
+   
     }
 
 def generate_mock_person_data():
@@ -168,12 +197,18 @@ def generate_mock_person_data():
             name_full_list = generate_name_list(first_name, last_name)
             birth_date_list = generate_birth_date_list(birth_date)
             
+            # Generate anumber list and select primary anumber
+            anumber_list = generate_anumber_list()
+            anumber_primary = select_primary_anumber(anumber_list)
+            
             # Create node properties as a dictionary
             node_properties = {
                 "NAME_FULL": full_name,
                 "NAME_FULL_LIST": name_full_list,
                 "BIRTH_DATE": birth_date,
-                "BIRTH_DATE_LIST": birth_date_list
+                "BIRTH_DATE_LIST": birth_date_list,
+                "ANUMBER_PRIMARY": anumber_primary,
+                "ANUMBER_LIST": anumber_list,
             }
             
             # Add to data list
