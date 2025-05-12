@@ -17,14 +17,20 @@ pip install -r requirements.txt
   - S3 Bucket to store Neptune data loading csv files
 
 ## Create SSH Tunnel
+Neptune
 ```
 ssh  -L 8182:neptune-dev.cluster-cz7fmvtxsrei.us-east-1.neptune.amazonaws.com:8182 -i neptune-bastion-dev.pem ec2-user@35.170.107.253
-
-ssh -L 5601:vpc-sts-deam-gds-dev-3wznyujg7kfe5kl7np7gdgoko4.us-east-1.es.amazonaws.com:443 \
-    -i neptune-bastion-dev.pem ec2-user@35.170.107.253
-
-
 ```
+Neptune Serverless
+```
+ssh  -L 8182:neptune-dev.cluster-cz7fmvtxsrei.us-east-1.neptune.amazonaws.com:8182 -i neptune-bastion-dev.pem ec2-user@35.170.107.253
+```
+
+OpenSearch Serverkess
+```
+ssh  -N -L 9443:utrkg13gnjqpmyz93250.us-east-1.aoss.amazonaws.com:443 -i neptune-bastion-dev.pem ec2-user@5.170.107.253
+```
+
 ### Check Neptune Status
 ```
 curl -k -X GET https://localhost:8182/status
@@ -90,5 +96,5 @@ curl -k -X POST \
       https://localhost:8182/system \
   -d '{
         "action" : "performDatabaseReset",
-        "token" : "b6cb228e-0a0e-b936-280e-46616755aba3"
+        "token" : "eccb588a-3a6c-4d18-89f5-cbf9fd76d64e"
       }'
