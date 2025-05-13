@@ -52,6 +52,11 @@ def convert_to_gremlin():
                     elif key.lower() == 'birth_date_list':
                         node['date_of_birth_list:Date[]'] = ';'.join(value)
                         continue
+                    elif key.lower() == 'anumber_list':
+                        # Format anumber list with colons
+                        formatted_anumbers = ':'.join(value)
+                        node['anumber_list:String[]'] = formatted_anumbers
+                        continue
                     value = ';'.join(str(v) for v in value)
                 
                 # Convert property name to lowercase for String suffix
@@ -59,6 +64,9 @@ def convert_to_gremlin():
                     node['name_full:String'] = str(value).upper()
                 elif key.lower() == 'birth_date':
                     node['date_of_birth:Date'] = str(value)
+                elif key.lower() == 'anumber_primary':
+                    # Handle anumber_primary as a String
+                    node['anumber_primary:String'] = str(value) if value is not None else ''
                 else:
                     node[f'{key.lower()}:String'] = str(value)
             
@@ -78,7 +86,7 @@ def convert_to_gremlin():
         
         # Save to CSV with proper quoting
         output_path = 'src/data/output/neptune/neptune_person_nodes_gremlin.csv'
-        nodes_df.to_csv(output_path, index=False, quoting=1)
+        nodes_df.to_csv(output_path, index=False, quoting=1, quotechar='"', escapechar='\\')
         
         # Print sample record
         print("\nSample Record:")
