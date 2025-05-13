@@ -34,8 +34,8 @@ ENV/
 
 # Project specific
 
-src/data/input/
-src/data/output/
+src/data/input/*
+src/data/output/*
 
 # OS specific
 .DS_Store
