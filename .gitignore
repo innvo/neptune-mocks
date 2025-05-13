@@ -33,12 +33,8 @@ ENV/
 *.swo
 
 # Project specific
-data/output/
-data/**/*.json
-*.csv
-*.json
-!src/data/demo/*.csv
-!src/data/demo/gremlin/*.csv
+src/data/input/
+src/data/output/
 
 # OS specific
 .DS_Store
