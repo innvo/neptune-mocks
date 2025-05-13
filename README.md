@@ -96,5 +96,4 @@ curl -k -X POST \
       https://localhost:8182/system \
   -d '{
         "action" : "performDatabaseReset",
-        "token" : "60cb637f-a8d8-eac2-7bab-cb9cc39ed858"
       }'

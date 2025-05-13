@@ -33,6 +33,7 @@ ENV/
 *.swo
 
 # Project specific
+
 src/data/input/
 src/data/output/
 

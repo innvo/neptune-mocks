@@ -6,6 +6,7 @@ import os
 
 # Configuration
 NUM_NODE_RECORDS =20000  # Number of node records to generate
+
 NODE_TYPES = ['person', 'name', 'address', 'anumber', 'receipt', 'form', 'email', 'phone']
 
 # Ensure the data/input directory exists
