@@ -1,0 +1,10 @@
+{
+    "results": [
+      {
+        "count": {
+          "@type": "g:Int64",
+          "@value": 25
+        }
+      }
+    ]
+  }
