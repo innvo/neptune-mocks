@@ -1,2 +1,0 @@
-~id,~from,~to,role_std:String,role_type:String,name_full:String,~label
-p1_f1,  p1,f1,PRIMARY BENEFICIARY,BENEFICIARY,JOHN SMITH,person_form

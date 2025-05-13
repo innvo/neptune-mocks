@@ -1,2 +1,0 @@
-f1,IOE0922398432,N-400,2021-08-25,IOE0922399333,ELIS,1234567,APPROVED,form
-~id,receipt_number:String,form_number:String,receipt_date_estimated:Date,principal_applicant_receipt_number:String,source_table:String,source_id:String,status:String,~label
