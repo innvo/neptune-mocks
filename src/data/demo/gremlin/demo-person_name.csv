@@ -1,2 +1,0 @@
-~id,node_id_from:String,node_id_to:String,edge_name:String,name_type:String,~label
-p1_n1,p1,n1,isAssociatedWithName,PRIMARY,person_name

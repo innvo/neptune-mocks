@@ -1,2 +1,0 @@
-~id,name_full:String,name_full_list:String[],alias_full_list:String[],anumber_primary:String,anumber_list:String[],birth_date:Date,birth_date_list:Date[],birth_country:String,birth_country_list:String[],role_type_list:String[],gender_list:String[],fingerprint_identification_list:String[],social_security_number_list:String[],~label
-p1,JOHN SMITH,JON SMITH,JOHN SMITHI;SMITTY SMITH,123456789,123456789,1980-08-25,1980-08-25,RUSSI,USSR;RUSSI,APPLICANT,M,FIN01,111-111-1111,person
