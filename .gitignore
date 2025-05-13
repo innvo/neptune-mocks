@@ -40,3 +40,4 @@ src/data/output/
 # OS specific
 .DS_Store
 Thumbs.db
+src/data/output/gds/mock_person_data.json
