@@ -22,8 +22,9 @@ wheels/
 
 # Virtual Environment
 venv/
-ENV/
 env/
+ENV/
+.venv/
 
 # IDE
 .idea/
@@ -31,11 +32,13 @@ env/
 *.swp
 *.swo
 
-# OS
+# Project specific
+src/data/input/**
+src/data/output/**
+
+# OS specific
 .DS_Store
 Thumbs.db
 
-# Project specific
-*.csv 
-*.pem
-SCRATCH.md
+.env
+.env

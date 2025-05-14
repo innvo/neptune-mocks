@@ -60,7 +60,7 @@ class NeptuneBulkLoader:
         logger.debug(f"Initialized NeptuneBulkLoader with endpoint: {neptune_endpoint}")
         
     def get_files_from_s3(self, bucket_name: str) -> List[Dict]:
-        """Get list of files from S3 bucket."""
+        """Get list of CSV files from S3 bucket."""
         try:
             logger.debug(f"Listing objects in S3 bucket: {bucket_name}")
             response = self.s3_client.list_objects_v2(Bucket=bucket_name)
@@ -70,22 +70,25 @@ class NeptuneBulkLoader:
                 return []
                 
             files = []
-            print_header("Found Files in S3")
+            print_header("Found CSV Files in S3")
             for obj in response['Contents']:
                 file_key = obj['Key']
+                # Skip non-CSV files
+                if not file_key.lower().endswith('.csv'):
+                    continue
+                    
                 file_size = obj['Size']
                 last_modified = obj['LastModified']
-                format_type = "opencypher" if "opencypher" in file_key.lower() else "csv"
                 file_info = {
                     'source': f"s3://{bucket_name}/{file_key}",
-                    'format': format_type,
+                    'format': 'csv',
                     'size': file_size,
                     'last_modified': last_modified
                 }
                 print(f"{Fore.CYAN}• {file_key}{Style.RESET_ALL}")
                 print(f"  Size: {file_size:,} bytes")
                 print(f"  Last Modified: {last_modified}")
-                print(f"  Format: {format_type}\n")
+                print(f"  Format: CSV\n")
                 files.append(file_info)
             return files
         except Exception as e:

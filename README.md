@@ -1,3 +1,13 @@
+# Prerquistes
+1. Install python dependencies
+```
+pip install -r requirements.txt
+```
+2. Install mermaid dependencies
+```
+
+```
+
 # Infrastructure
 1. Accessing AWS Neptune requires a SSH Tunnel
 2. AWS Neptune requires:
@@ -7,10 +17,20 @@
   - S3 Bucket to store Neptune data loading csv files
 
 ## Create SSH Tunnel
+Neptune
 ```
 ssh  -L 8182:neptune-dev.cluster-cz7fmvtxsrei.us-east-1.neptune.amazonaws.com:8182 -i neptune-bastion-dev.pem ec2-user@35.170.107.253
-
 ```
+Neptune Serverless
+```
+ssh  -L 8182:neptune-dev.cluster-cz7fmvtxsrei.us-east-1.neptune.amazonaws.com:8182 -i neptune-bastion-dev.pem ec2-user@35.170.107.253
+```
+
+OpenSearch Serverkess
+```
+ssh  -N -L 9443:utrkg13gnjqpmyz93250.us-east-1.aoss.amazonaws.com:443 -i neptune-bastion-dev.pem ec2-user@5.170.107.253
+```
+
 ### Check Neptune Status
 ```
 curl -k -X GET https://localhost:8182/status
@@ -76,5 +96,4 @@ curl -k -X POST \
       https://localhost:8182/system \
   -d '{
         "action" : "performDatabaseReset",
-        "token" : "fecb1d1f-27d6-234f-e77d-5465c7b04705"
       }'
