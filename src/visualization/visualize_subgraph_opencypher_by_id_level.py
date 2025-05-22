@@ -16,23 +16,19 @@ logger = logging.getLogger(__name__)
 def query_neptune(query: str) -> Dict[str, Any]:
     """Execute a query against Neptune and return the results."""
     url = "https://localhost:8182/openCypher"
-    headers = {"Content-Type": "application/json"}
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
     data = {"query": query}
     
     logger.info(f"Executing Neptune query: {query}")
-    response = requests.post(url, headers=headers, json=data, verify=False)
+    response = requests.post(url, headers=headers, data=data, verify=False)
     response.raise_for_status()
     result = response.json()
     logger.info(f"Neptune response: {json.dumps(result, indent=2)}")
     return result
 
 def get_subgraph(node_id: str) -> List[Dict[str, Any]]:
-    """Get subgraph for a specific node (person or address) and their connections."""
-    query = f"""
-    MATCH (n) WHERE id(n) IN ["{node_id}"] 
-    OPTIONAL MATCH (n)-[r]-(m) 
-    RETURN n, r, m
-    """
+    """Get subgraph for a specific node (person or address) and their connections up to 2 levels deep."""
+    query = f'MATCH path = (start)-[*0..0]-(n) WHERE id(start) = "{node_id}" RETURN nodes(path) as nodes, relationships(path) as edges'
     result = query_neptune(query)
     return result.get('results', [])
 
@@ -57,52 +53,50 @@ def visualize_network(node_id: str):
         edge_count = 0
         
         for result in subgraph_data:
-            # Add initial node
-            initial_node = result.get('n', {})
-            initial_id = initial_node.get('~id')
-            initial_props = initial_node.get('~properties', {})
-            initial_labels = initial_node.get('~labels', [])
+            nodes = result.get('nodes', [])
+            edges = result.get('edges', [])
             
-            if initial_id:
-                if 'person' in initial_labels:
-                    G.add_node(initial_id,
-                              node_type='person',
-                              label=initial_props.get('name_full', ''))
-                    person_count += 1
-                elif 'address' in initial_labels:
-                    G.add_node(initial_id,
-                              node_type='address',
-                              label=initial_props.get('address_full', ''))
-                    address_count += 1
+            logger.info(f"Processing {len(nodes)} nodes and {len(edges)} edges")
             
-            # Add connected node and edge
-            connected_node = result.get('m', {})
-            edge_data = result.get('r', {})
-            
-            if connected_node and edge_data:
-                connected_id = connected_node.get('~id')
-                connected_props = connected_node.get('~properties', {})
-                connected_labels = connected_node.get('~labels', [])
-                edge_props = edge_data.get('~properties', {})
+            # Add nodes
+            for node in nodes:
+                node_id = node.get('~id')
+                node_props = node.get('~properties', {})
+                node_labels = node.get('~labels', [])
                 
-                if connected_id:
-                    if 'person' in connected_labels:
-                        G.add_node(connected_id,
+                if node_id and node_id not in G.nodes():
+                    if 'person' in node_labels:
+                        G.add_node(node_id,
                                   node_type='person',
-                                  label=connected_props.get('name_full', ''))
+                                  label=node_props.get('name_full', ''))
                         person_count += 1
-                    elif 'address' in connected_labels:
-                        G.add_node(connected_id,
+                    elif 'address' in node_labels:
+                        G.add_node(node_id,
                                   node_type='address',
-                                  label=connected_props.get('address_full', ''))
+                                  label=node_props.get('address_full', ''))
                         address_count += 1
-                    
-                    # Add edge (direction doesn't matter for visualization)
-                    G.add_edge(initial_id,
-                              connected_id,
-                              edge_type=edge_data.get('~type'),
+            
+            # Add edges
+            for edge in edges:
+                logger.info(f"Processing edge: {json.dumps(edge, indent=2)}")
+                edge_type = edge.get('~type')
+                edge_props = edge.get('~properties', {})
+                
+                # Extract start and end nodes from the edge
+                start_node = edge.get('~start')
+                end_node = edge.get('~end')
+                
+                logger.info(f"Edge from {start_node} to {end_node}")
+                
+                if start_node and end_node and start_node in G.nodes() and end_node in G.nodes():
+                    G.add_edge(start_node,
+                              end_node,
+                              edge_type=edge_type,
                               address_type=edge_props.get('address_type'))
                     edge_count += 1
+                    logger.info(f"Added edge from {start_node} to {end_node}")
+                else:
+                    logger.warning(f"Could not add edge: start={start_node}, end={end_node}")
         
         logger.info(f"Added {person_count} person nodes, {address_count} address nodes, and {edge_count} edges to the graph")
         
@@ -177,7 +171,7 @@ def visualize_network(node_id: str):
         ]
         plt.legend(handles=legend_elements, loc='upper right')
         
-        plt.title('Person-Address Network')
+        plt.title('Person-Address Network (2 Levels Deep)')
         plt.axis('off')
         
         # Save the plot
