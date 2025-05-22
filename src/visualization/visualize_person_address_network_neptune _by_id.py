@@ -26,30 +26,30 @@ def query_neptune(query: str) -> Dict[str, Any]:
     logger.info(f"Neptune response: {json.dumps(result, indent=2)}")
     return result
 
-def get_subgraph(person_id: str) -> List[Dict[str, Any]]:
-    """Get subgraph for a specific person and their connected addresses."""
+def get_subgraph(node_id: str) -> List[Dict[str, Any]]:
+    """Get subgraph for a specific node (person or address) and their connections."""
     query = f"""
-    MATCH (n) WHERE id(n) IN ["{person_id}"] 
+    MATCH (n) WHERE id(n) IN ["{node_id}"] 
     OPTIONAL MATCH (n)-[r]-(m) 
     RETURN n, r, m
     """
     result = query_neptune(query)
     return result.get('results', [])
 
-def visualize_person_address_network(person_id: str):
+def visualize_network(node_id: str):
     """
-    Visualize the person-address network for a specific person.
+    Visualize the network for a specific node (person or address) and their connections.
     
     Args:
-        person_id (str): The ID of the person node to visualize.
+        node_id (str): The ID of the node to visualize (can be person or address).
     """
     try:
         # Create a new directed graph
         G = nx.DiGraph()
         
         # Get subgraph from Neptune
-        logger.info(f"Fetching subgraph for person {person_id} from Neptune...")
-        subgraph_data = get_subgraph(person_id)
+        logger.info(f"Fetching subgraph for node {node_id} from Neptune...")
+        subgraph_data = get_subgraph(node_id)
         
         # Add nodes and edges from the subgraph
         person_count = 0
@@ -57,34 +57,49 @@ def visualize_person_address_network(person_id: str):
         edge_count = 0
         
         for result in subgraph_data:
-            # Add person node
-            person_data = result.get('n', {})
-            person_id = person_data.get('~id')
-            person_props = person_data.get('~properties', {})
+            # Add initial node
+            initial_node = result.get('n', {})
+            initial_id = initial_node.get('~id')
+            initial_props = initial_node.get('~properties', {})
+            initial_labels = initial_node.get('~labels', [])
             
-            if person_id and 'person' in person_data.get('~labels', []):
-                G.add_node(person_id,
-                          node_type='person',
-                          label=person_props.get('name_full', ''))
-                person_count += 1
+            if initial_id:
+                if 'person' in initial_labels:
+                    G.add_node(initial_id,
+                              node_type='person',
+                              label=initial_props.get('name_full', ''))
+                    person_count += 1
+                elif 'address' in initial_labels:
+                    G.add_node(initial_id,
+                              node_type='address',
+                              label=initial_props.get('address_full', ''))
+                    address_count += 1
             
-            # Add connected address node and edge
-            address_data = result.get('m', {})
+            # Add connected node and edge
+            connected_node = result.get('m', {})
             edge_data = result.get('r', {})
             
-            if address_data and edge_data:
-                address_id = address_data.get('~id')
-                address_props = address_data.get('~properties', {})
+            if connected_node and edge_data:
+                connected_id = connected_node.get('~id')
+                connected_props = connected_node.get('~properties', {})
+                connected_labels = connected_node.get('~labels', [])
                 edge_props = edge_data.get('~properties', {})
                 
-                if address_id and 'address' in address_data.get('~labels', []):
-                    G.add_node(address_id,
-                              node_type='address',
-                              label=address_props.get('address_full', ''))
-                    address_count += 1
+                if connected_id:
+                    if 'person' in connected_labels:
+                        G.add_node(connected_id,
+                                  node_type='person',
+                                  label=connected_props.get('name_full', ''))
+                        person_count += 1
+                    elif 'address' in connected_labels:
+                        G.add_node(connected_id,
+                                  node_type='address',
+                                  label=connected_props.get('address_full', ''))
+                        address_count += 1
                     
-                    G.add_edge(person_id,
-                              address_id,
+                    # Add edge (direction doesn't matter for visualization)
+                    G.add_edge(initial_id,
+                              connected_id,
                               edge_type=edge_data.get('~type'),
                               address_type=edge_props.get('address_type'))
                     edge_count += 1
@@ -180,6 +195,14 @@ def visualize_person_address_network(person_id: str):
         logger.error(f"Error during visualization: {str(e)}", exc_info=True)
 
 if __name__ == "__main__":
-    # Example usage with a specific person ID:
-    person_id = "103b8fd1-fb6a-43e9-b7ea-1ac5eee9f976"
-    visualize_person_address_network(person_id) 
+    # Prompt user for node ID
+    print("\nEnter the node ID to visualize its network")
+    print("Example person ID: 103b8fd1-fb6a-43e9-b7ea-1ac5eee9f976")
+    print("Example address ID: 3cf559d0-6465-4b85-91bc-1c27f98b90cb")
+    print("Press Enter to use the example person ID or type a different ID:")
+    
+    user_input = input().strip()
+    node_id = user_input if user_input else "103b8fd1-fb6a-43e9-b7ea-1ac5eee9f976"
+    
+    print(f"\nVisualizing network for node ID: {node_id}")
+    visualize_network(node_id) 
