@@ -26,98 +26,70 @@ def query_neptune(query: str) -> Dict[str, Any]:
     logger.info(f"Neptune response: {json.dumps(result, indent=2)}")
     return result
 
-def get_all_nodes() -> List[Dict[str, Any]]:
-    """Get all nodes from Neptune."""
-    query = """
-    MATCH (n)
-    RETURN n
+def get_subgraph(person_id: str) -> List[Dict[str, Any]]:
+    """Get subgraph for a specific person and their connected addresses."""
+    query = f"""
+    MATCH (n) WHERE id(n) IN ["{person_id}"] 
+    OPTIONAL MATCH (n)-[r]-(m) 
+    RETURN n, r, m
     """
     result = query_neptune(query)
-    nodes = result.get('results', [])
-    logger.info(f"Retrieved {len(nodes)} nodes from Neptune")
-    return nodes
+    return result.get('results', [])
 
-def get_all_edges() -> List[Dict[str, Any]]:
-    """Get all edges from Neptune."""
-    query = """
-    MATCH ()-[r]->()
-    RETURN r
+def visualize_person_address_network(person_id: str):
     """
-    result = query_neptune(query)
-    edges = result.get('results', [])
-    logger.info(f"Retrieved {len(edges)} edges from Neptune")
-    return edges
-
-def visualize_person_address_network(node_ids: Optional[Set[str]] = None):
-    """
-    Visualize the person-address network, optionally filtered by a set of node IDs.
+    Visualize the person-address network for a specific person.
     
     Args:
-        node_ids (Optional[Set[str]]): Set of node IDs to include in the visualization.
-                                     If None, all nodes will be included.
+        person_id (str): The ID of the person node to visualize.
     """
     try:
         # Create a new directed graph
         G = nx.DiGraph()
         
-        # Get nodes and edges from Neptune
-        logger.info("Fetching nodes from Neptune...")
-        nodes = get_all_nodes()
+        # Get subgraph from Neptune
+        logger.info(f"Fetching subgraph for person {person_id} from Neptune...")
+        subgraph_data = get_subgraph(person_id)
         
-        logger.info("Fetching edges from Neptune...")
-        edges = get_all_edges()
-        
-        # Add nodes
+        # Add nodes and edges from the subgraph
         person_count = 0
         address_count = 0
-        for node in nodes:
-            node_data = node.get('n', {})
-            node_id = node_data.get('~id')
-            
-            # Skip nodes not in the filter set if filtering is enabled
-            if node_ids is not None and node_id not in node_ids:
-                continue
-                
-            properties = node_data.get('~properties', {})
-            labels = node_data.get('~labels', [])
-            
-            logger.debug(f"Processing node: {json.dumps(node_data, indent=2)}")
-            
-            if 'person' in labels:  # Person node
-                G.add_node(node_id,
-                          node_type='person',
-                          label=properties.get('name_full', ''))
-                person_count += 1
-            elif 'address' in labels:  # Address node
-                G.add_node(node_id,
-                          node_type='address',
-                          label=properties.get('address_full', ''))
-                address_count += 1
-        
-        logger.info(f"Added {person_count} person nodes and {address_count} address nodes to the graph")
-        
-        # Add edges (only between nodes that are in the graph)
         edge_count = 0
-        for edge in edges:
-            edge_data = edge.get('r', {})
-            from_id = edge_data.get('~start')
-            to_id = edge_data.get('~end')
-            properties = edge_data.get('~properties', {})
-            
-            # Skip edges where either node is not in the graph
-            if from_id not in G or to_id not in G:
-                continue
-                
-            logger.debug(f"Processing edge: {json.dumps(edge_data, indent=2)}")
-            
-            if from_id and to_id:
-                G.add_edge(from_id,
-                          to_id,
-                          edge_type=edge_data.get('~type'),
-                          address_type=properties.get('address_type'))
-                edge_count += 1
         
-        logger.info(f"Added {edge_count} edges to the graph")
+        for result in subgraph_data:
+            # Add person node
+            person_data = result.get('n', {})
+            person_id = person_data.get('~id')
+            person_props = person_data.get('~properties', {})
+            
+            if person_id and 'person' in person_data.get('~labels', []):
+                G.add_node(person_id,
+                          node_type='person',
+                          label=person_props.get('name_full', ''))
+                person_count += 1
+            
+            # Add connected address node and edge
+            address_data = result.get('m', {})
+            edge_data = result.get('r', {})
+            
+            if address_data and edge_data:
+                address_id = address_data.get('~id')
+                address_props = address_data.get('~properties', {})
+                edge_props = edge_data.get('~properties', {})
+                
+                if address_id and 'address' in address_data.get('~labels', []):
+                    G.add_node(address_id,
+                              node_type='address',
+                              label=address_props.get('address_full', ''))
+                    address_count += 1
+                    
+                    G.add_edge(person_id,
+                              address_id,
+                              edge_type=edge_data.get('~type'),
+                              address_type=edge_props.get('address_type'))
+                    edge_count += 1
+        
+        logger.info(f"Added {person_count} person nodes, {address_count} address nodes, and {edge_count} edges to the graph")
         
         if len(G.nodes()) == 0:
             logger.error("No nodes were added to the graph. Check the Neptune response format.")
@@ -208,9 +180,6 @@ def visualize_person_address_network(node_ids: Optional[Set[str]] = None):
         logger.error(f"Error during visualization: {str(e)}", exc_info=True)
 
 if __name__ == "__main__":
-    # Example usage with filtering:
-    # node_ids = {"person1", "address1", "address2"}
-    # visualize_person_address_network(node_ids)
-    
-    # Or visualize all nodes:
-    visualize_person_address_network() 
+    # Example usage with a specific person ID:
+    person_id = "103b8fd1-fb6a-43e9-b7ea-1ac5eee9f976"
+    visualize_person_address_network(person_id) 
