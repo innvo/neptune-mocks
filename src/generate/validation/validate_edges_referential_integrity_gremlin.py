@@ -1,35 +1,36 @@
 import pandas as pd
-import json
 
 def validate_edges():
     try:
         # Read the node data
-        print("Reading mock_person_data.json...")
-        with open('src/data/output/gds/mock_person_data.json', 'r') as f:
-            person_data = json.load(f)
-        node_ids = set(person['node_id'] for person in person_data)
-        print(f"Found {len(node_ids)} unique nodes in mock_person_data.json")
+        print("Reading person nodes...")
+        person_nodes_df = pd.read_csv('src/data/output/neptune/neptune_person_nodes_gremlin.csv')
+        person_ids = set(person_nodes_df['~id'])
+        print(f"Found {len(person_ids)} unique person nodes")
+        
+        print("\nReading address nodes...")
+        address_nodes_df = pd.read_csv('src/data/output/neptune/neptune_address_nodes_gremlin.csv')
+        address_ids = set(address_nodes_df['~id'])
+        print(f"Found {len(address_ids)} unique address nodes")
         
         # Read the edge data
-        print("\nReading mock_person-name_data.json...")
-        with open('src/data/output/gds/mock_person-name_data.json', 'r') as f:
-            edge_data = [json.loads(line) for line in f]
-        edge_df = pd.DataFrame(edge_data)
-        print(f"Found {len(edge_df)} edges to validate")
+        print("\nReading person-address edges...")
+        edges_df = pd.read_csv('src/data/output/neptune/neptune_person_address_edges_gremlin.csv')
+        print(f"Found {len(edges_df)} edges to validate")
         
-        # Check for missing source nodes
-        missing_from = set(edge_df['node_id_from']) - node_ids
+        # Check for missing source nodes (person IDs)
+        missing_from = set(edges_df['~from']) - person_ids
         if missing_from:
             print(f"\nERROR: Found {len(missing_from)} edges with missing source nodes:")
             for node_id in missing_from:
-                print(f"  - Edge source node {node_id} not found in mock_person_data.json")
+                print(f"  - Edge source node {node_id} not found in person nodes file")
         
-        # Check for missing target nodes
-        missing_to = set(edge_df['node_id_to']) - node_ids
+        # Check for missing target nodes (address IDs)
+        missing_to = set(edges_df['~to']) - address_ids
         if missing_to:
             print(f"\nERROR: Found {len(missing_to)} edges with missing target nodes:")
             for node_id in missing_to:
-                print(f"  - Edge target node {node_id} not found in mock_person_data.json")
+                print(f"  - Edge target node {node_id} not found in address nodes file")
         
         # Print summary
         total_errors = len(missing_from) + len(missing_to)
