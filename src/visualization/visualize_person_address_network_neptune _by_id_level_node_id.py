@@ -168,7 +168,7 @@ def visualize_network(node_ids: List[str], level: int):
                              alpha=0.6)
         
         # Add labels
-        labels = {node: G.nodes[node]['label'] for node in G.nodes()}
+        labels = {node: f"{G.nodes[node]['label']}\n({node})" for node in G.nodes()}
         nx.draw_networkx_labels(G, pos, labels, font_size=8)
         
         # Add legend
