@@ -1,82 +1,105 @@
+import pandas as pd
 import json
-import csv
 import os
-from pathlib import Path
+from tqdm import tqdm
+from datetime import datetime, timedelta
+import random
 
-def read_json_file(file_path):
-    """Read and parse a JSON file."""
-    with open(file_path, 'r') as f:
-        return json.load(f)
-
-def write_csv_file(data, output_path):
-    """Write data to a CSV file."""
-    with open(output_path, 'w', newline='') as f:
-        writer = csv.writer(f)
-        writer.writerows(data)
-
-def generate_person_gremlin_csv():
-    """Generate Neptune Gremlin CSV data from person JSON files."""
-    # Input and output paths
-    input_dir = Path("src/data/output/gds")
-    output_dir = Path("src/data/output/neptune")
+# TODO: Not relevant for GDS 
+def generate_variant_dates(base_date, count=6):
+    """Generate slightly different dates based on the base date"""
+    base = datetime.strptime(base_date, '%Y-%m-%d')
+    dates = []
+    for i in range(count):
+        # Add random variation of -5 to +5 days
+        variation = random.randint(-5, 5)
+        variant_date = base + timedelta(days=variation)
+        dates.append(variant_date.strftime('%Y-%m-%d'))
+    return dates
     
-    # Ensure output directory exists
-    output_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Find all person JSON files
-    person_files = list(input_dir.glob("*person*.json"))
-    
-    if not person_files:
-        print("No person JSON files found!")
-        return False
-    
-    # Prepare CSV data
-    csv_data = []
-    # Add header row
-    csv_data.append(["~id", "~label", "~properties"])
-    
-    for file_path in person_files:
-        try:
-            # Read JSON data
-            person_data = read_json_file(file_path)
-            
-            # Process each person
-            for person in person_data:
-                # Create vertex ID
-                vertex_id = f"person_{person.get('id', '')}"
-                
-                # Create properties string
-                properties = {
-                    "name": person.get("name", ""),
-                    "age": person.get("age", ""),
-                    "email": person.get("email", ""),
-                    "phone": person.get("phone", "")
-                }
-                
-                # Convert properties to JSON string
-                properties_str = json.dumps(properties)
-                
-                # Add row to CSV data
-                csv_data.append([vertex_id, "Person", properties_str])
-            
-            print(f"Processed {file_path}")
-            
-        except Exception as e:
-            print(f"Error processing {file_path}: {str(e)}")
-            return False
-    
-    # Write CSV file
-    output_file = output_dir / "person_vertices.csv"
+# TODO: Replace with GDS data
+def convert_to_gremlin():
     try:
-        write_csv_file(csv_data, output_file)
-        print(f"Successfully created {output_file}")
+        # Ensure output directory exists
+        os.makedirs('src/data/output/neptune', exist_ok=True)
+        
+        # Read the mock person data from JSON
+        print("Reading mock person data...")
+        with open('src/data/output/gds/mock_person_data.json', 'r') as f:
+            person_data = json.load(f)
+        
+        # Initialize list to store converted nodes
+        nodes = []
+        
+        print("\nConverting data to Gremlin format...")
+        for person in tqdm(person_data, desc="Processing nodes"):
+            # Get the node properties
+            properties = person['node_properties']
+            
+            # Create the node with required fields
+            node = {
+                '~id': person['node_id']
+            }
+            
+            # Add all properties from the JSON
+            for key, value in properties.items():
+                if isinstance(value, list):
+                    # Convert list to string representation with semicolons for each element
+                    if key.lower() == 'name_full_list':
+                        # Format name list with semicolons
+                        node['name_full_list:String[]'] = value
+                        continue
+                    elif key.lower() == 'birth_date_list':
+                        node['date_of_birth_list:Date[]'] = ';'.join(value)
+                        continue
+                    elif key.lower() == 'anumber_list':
+                        # Format anumber list with colons
+                        formatted_anumbers = ':'.join(value)
+                        node['anumber_list:String[]'] = formatted_anumbers
+                        continue
+                    value = ';'.join(str(v) for v in value)
+                
+                # Convert property name to lowercase for String suffix
+                if key.lower() == 'name_full':
+                    node['name_full:String'] = str(value).upper()
+                elif key.lower() == 'birth_date':
+                    node['date_of_birth:Date'] = str(value)
+                elif key.lower() == 'anumber_primary':
+                    # Handle anumber_primary as a String
+                    node['anumber_primary:String'] = str(value) if value is not None else ''
+                else:
+                    node[f'{key.lower()}:String'] = str(value)
+            
+            # Add person label
+            node['~label'] = 'person'
+            
+            nodes.append(node)
+        
+        # Convert to DataFrame
+        nodes_df = pd.DataFrame(nodes)
+        
+        # Reorder columns to ensure ~label is last
+        cols = nodes_df.columns.tolist()
+        cols.remove('~label')
+        cols.append('~label')
+        nodes_df = nodes_df[cols]
+        
+        # Save to CSV with proper quoting
+        output_path = 'src/data/output/neptune/neptune_person_nodes_gremlin.csv'
+        nodes_df.to_csv(output_path, index=False, quoting=1, quotechar='"', escapechar='\\')
+        
+        # Print sample record
+        print("\nSample Record:")
+        sample = nodes[0]
+        print(json.dumps(sample, indent=2))
+        
+        print(f"\nGenerated {len(nodes)} Gremlin-compatible nodes")
+        print(f"Saved to {output_path}")
         return True
+        
     except Exception as e:
-        print(f"Error writing CSV file: {str(e)}")
+        print(f"Error converting data: {str(e)}")
         return False
 
 if __name__ == "__main__":
-    success = generate_person_gremlin_csv()
-    if not success:
-        print("Failed to generate person Gremlin CSV data")
-        exit(1) 
+    convert_to_gremlin()
