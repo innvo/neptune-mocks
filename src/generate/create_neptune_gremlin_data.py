@@ -72,7 +72,8 @@ def main():
     neptune_scripts = [
         "src/generate/neptune/generate_neptune_person_json_gremlin_csv.py",
         "src/generate/neptune/generate_neptune_address_json_gremlin_csv.py",
-        "src/generate/neptune/generate_neptune_person-address_json_gremlin_csv.py"
+        "src/generate/neptune/generate_neptune_person-address_json_gremlin_csv.py",
+        "src/generate/neptune/generate_neptune_person-receipt_json_gremlin_csv.py"
     ]
 
     # Combine all scripts for existence check

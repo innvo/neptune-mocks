@@ -8,6 +8,95 @@ import json
 import platform
 import subprocess
 
+# Define role type mappings
+ROLE_TYPE_MAPPINGS = {
+    'PRIMARY BENEFICIARY': 'PRIMARY BENEFICIARY',
+    'INCIDENT OFFICIAL': 'INCIDENT OFFICIAL',
+    'SPOUSE': 'NONPRIMARY BENEFICIARY',
+    'SON': 'NONPRIMARY BENEFICIARY',
+    'BENEFICIARY': 'PRIMARY BENEFICIARY',
+    'DERIVATIVE APPLICANT': 'NONPRIMARY BENEFICIARY',
+    'STEPFATHER': 'NONPRIMARY BENEFICIARY',
+    'MOTHER': 'MOTHER',
+    'MOTHER': 'NONPRIMARY BENEFICIARY',
+    'STEPSON': 'NONPRIMARY BENEFICIARY',
+    'SPOUSE': 'SPOUSE',
+    'PARENT': 'NONPRIMARY BENEFICIARY',
+    'WIFE': 'NONPRIMARY BENEFICIARY',
+    'ADOPTED DAUGHTER': 'NONPRIMARY BENEFICIARY',
+    'BENEFICIARY\'S SPOUSE': 'NONPRIMARY BENEFICIARY',
+    'APPLICANT': 'APPLICANT',
+    'ADOPTED SON': 'NONPRIMARY BENEFICIARY',
+    'GRANDMOTHER': 'NONPRIMARY BENEFICIARY',
+    'PARENT 1': 'PRIMARY BENEFICIARY',
+    'HOUSEHOLD MEMBER': 'NONPRIMARY BENEFICIARY',
+    'APPLICANT': 'PRIMARY BENEFICIARY',
+    'STEPDAUGHTER': 'NONPRIMARY BENEFICIARY',
+    'INTERPRETER': 'INTERPRETER',
+    'FAMILY MEMBER': 'FAMILY MEMBER',
+    'I130 OTHER BENEFICIARY': 'BENEFICIARY',
+    'PARENT 2 NAME AT BIRTH': 'NONPRIMARY BENEFICIARY',
+    'ADOPTIVE FATHER': 'NONPRIMARY BENEFICIARY',
+    'BROTHER': 'NONPRIMARY BENEFICIARY',
+    'PARENTS': 'NONPRIMARY BENEFICIARY',
+    'PRINCIPAL ALIEN': 'PRIMARY BENEFICIARY',
+    'ATTORNEY AT INTERVIEW': 'ATTORNEY',
+    'SISTER': 'NONPRIMARY BENEFICIARY',
+    'PARENT 2': 'PRIMARY BENEFICIARY',
+    'GRANDFATHER': 'NONPRIMARY BENEFICIARY',
+    'PETITIONER': 'PETITIONER',
+    'ATTORNEY': 'ATTORNEY',
+    'HUSBAND': 'NONPRIMARY BENEFICIARY',
+    'PARENT 1 NAME AT BIRTH': 'NONPRIMARY BENEFICIARY',
+    'FATHER': 'FATHER',
+    'HOUSEHOLD RELATIVE': 'NONPRIMARY BENEFICIARY',
+    'PRINCIPAL APPLICANT': 'PRIMARY BENEFICIARY',
+    'INTENDING IMMIGRANT NO NEED FOR I864A': 'PRIMARY BENEFICIARY',
+    'PRINCIPAL APPLICANT': 'PRIMARY BENEFICIARY',
+    'I130 OTHER BENEFICIARY': 'NONPRIMARY BENEFICIARY',
+    'PARENT 1': 'NONPRIMARY BENEFICIARY',
+    'USCIS CIVIL SURGEON': 'CIVIL SURGEON',
+    'IMPLICATED FAMILY MEMBER': 'FAMILY MEMBER',
+    'FAMILY MEMBER': 'NONPRIMARY BENEFICIARY',
+    'AUTHORIZED SIGNATORY': 'PETITIONER',
+    'BENEFICIARY': 'BENEFICIARY',
+    'PRINCIPAL APPLICANT': 'PRINCIPAL APPLICANT',
+    'SPONSOR AFFIDAVIT OF SUPP': 'PETITIONER',
+    'SPOUSE': 'PRIMARY BENEFICIARY',
+    'INTERPRETER IN G1256': 'INTERPRETER',
+    'SPONSOR': 'PETITIONER',
+    'CHILD': 'NONPRIMARY BENEFICIARY',
+    'INTERPRETER AT INTERVIEW': 'INTERPRETER',
+    'PARENT 2': 'NONPRIMARY BENEFICIARY',
+    'REPRESENTATIVE': 'REPRESENTATIVE',
+    'ADOPTIVE MOTHER': 'NONPRIMARY BENEFICIARY',
+    'DAUGHTER': 'NONPRIMARY BENEFICIARY',
+    'BENEFICIARY, SEPARATE PETITION': 'PRIMARY BENEFICIARY',
+    'FATHER': 'NONPRIMARY BENEFICIARY',
+    'STUDENT': 'STUDENT',
+    'PREPARER': 'PREPARER',
+    'BENEFICIARY\'S FAMILY MEMBER': 'NONPRIMARY BENEFICIARY',
+    'PARENT': 'CF-PARENT',
+    'STEPMOTHER': 'NONPRIMARY BENEFICIARY',
+    'USCIS OFFICER AS INTERPRETER': 'INTERPRETER',
+    'GRANDSON': 'NONPRIMARY BENEFICIARY',
+    'LANGUAGE SERVICE PROVIDER': 'INTERPRETER',
+    'BENEFICIARY\'S LANGUAGE SERVICE PROVIDER': 'INTERPRETER',
+    'BENEFICIARY\'S INTERPRETER IN G1256': 'INTERPRETER',
+    'GRANDDAUGHTER': 'NONPRIMARY BENEFICIARY',
+    'FIANCE': 'NONPRIMARY BENEFICIARY',
+    'INTERPRETER VIA PHONE': 'INTERPRETER',
+    'CUSTODIAN SON': 'NONPRIMARY BENEFICIARY',
+    'CUSTODIAN DAUGHTER': 'NONPRIMARY BENEFICIARY',
+    'LEGAL GUARDIAN': 'NONPRIMARY BENEFICIARY',
+    'FOUNDLING': 'NONPRIMARY BENEFICIARY',
+    'BENEFICIARY\'S FAMILY MEMBER': 'CF-BENEFICIARY\'S FAMILY MEMBER',
+    'APPLICANT': 'CF-APPLICANT',
+    'PARENT 2': 'PARENT',
+    'BENEFICIARY': 'CF-BENEFICIARY',
+    'PARENT 1 NAME AT BIRTH': 'PARENT'
+}
+
 def clear_terminal():
     """Clear the terminal screen based on the operating system"""
     if platform.system() == 'Windows':
@@ -91,6 +180,14 @@ def generate_person_receipt_edges():
         print("Reading node data...")
         node_df = pd.read_csv('src/data/input/node_data.csv', usecols=['node_id', 'node_type'])
         
+        # Read person data to get NAME_FULL
+        print("Reading person data...")
+        with open('src/data/output/gds/mock_person_data.json', 'r') as f:
+            person_data = json.load(f)
+        
+        # Create a dictionary for quick person lookup
+        person_lookup = {person['node_id']: person['node_properties']['NAME_FULL'] for person in person_data}
+        
         # Print node type statistics
         print("\nNode Type Statistics:")
         print(f"Total number of nodes: {len(node_df)}")
@@ -137,13 +234,22 @@ def generate_person_receipt_edges():
             for _, receipt in selected_receipts.iterrows():
                 receipt_id = receipt['node_id']
                 if validate_node_existence(node_df, receipt_id):
+                    # Get random role type and its standardized version
+                    role_type = random.choice(list(ROLE_TYPE_MAPPINGS.keys()))
+                    role_type_std = ROLE_TYPE_MAPPINGS[role_type]
+                    
+                    # Get person's name
+                    name_full = person_lookup.get(person_id, "UNKNOWN")
+                    
                     edges.append({
                         'edge_id': str(uuid.uuid4()),
                         'node_id_from': person_id,
                         'node_id_to': receipt_id,
                         'edge_type': 'person_receipt',
                         'edge_properties': {
-                            'RELATIONSHIP_TYPE': random.choice(['PRIMARY', 'SECONDARY', 'TERTIARY', 'QUATERNARY'])
+                            'ROLE_TYPE': role_type,
+                            'ROLE_TYPE_STD': role_type_std,
+                            'NAME_FULL': name_full
                         }
                     })
                     edge_type_count += 1
