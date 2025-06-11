@@ -5,9 +5,11 @@ import json
 import os
 
 # Configuration
-NUM_NODE_RECORDS =20000  # Number of node records to generate
+NUM_NODE_RECORDS =20  # Number of node records to generate
 
-NODE_TYPES = ['person', 'name', 'address', 'anumber', 'receipt', 'form', 'email', 'phone']
+#NODE_TYPES = ['person', 'name', 'address', 'anumber', 'receipt', 'form', 'email', 'phone']
+
+NODE_TYPES = ['person', 'address']
 
 # Ensure the data/input directory exists
 os.makedirs('src/data/input', exist_ok=True)

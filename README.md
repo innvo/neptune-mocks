@@ -93,6 +93,7 @@ curl -k -X POST \
 
 curl -k -X POST \
   -H 'Content-Type: application/json' \
+  -H  'Authorization: Bearer "aacb7aa0-dd1e-53a8-ce06-94e266c7defc" \
       https://localhost:8182/system \
   -d '{
         "action" : "performDatabaseReset",
