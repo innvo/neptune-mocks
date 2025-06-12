@@ -76,8 +76,12 @@ def main():
         "src/generate/neptune/generate_neptune_person-receipt_json_gremlin_csv.py"
     ]
 
+    validation_scripts = [
+        "src/generate/validation/validate_edges_referential_integrity_gremlin.py"
+    ]
+
     # Combine all scripts for existence check
-    all_scripts = node_scripts + edge_scripts + neptune_scripts
+    all_scripts = node_scripts + edge_scripts + neptune_scripts + validation_scripts
 
     # Verify all scripts exist before starting
     for script in all_scripts:
@@ -115,7 +119,15 @@ def main():
             print(f"Failed to run {script}. Stopping process.")
             return
 
-    print("\nAll data generation scripts completed successfully!")
+    print("\nPhase 4: Validating Edge Referential Integrity...")
+    
+    # Run validation scripts
+    for script in validation_scripts:
+        if not run_script(script):
+            print(f"Failed to run {script}. Stopping process.")
+            return
+
+    print("\nAll data generation and validation scripts completed successfully!")
 
 if __name__ == "__main__":
     main()
