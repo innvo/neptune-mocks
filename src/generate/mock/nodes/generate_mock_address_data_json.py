@@ -5,6 +5,7 @@ from tqdm import tqdm
 import os
 import time
 import platform
+import hashlib
 
 def clear_terminal():
     """Clear the terminal screen"""
@@ -88,9 +89,13 @@ def generate_mock_address_data():
             full_address = fake.address().upper()  # Convert to uppercase as per requirements
             full_address = full_address.replace('\n', ' ').strip()  # Remove carriage returns and extra spaces
             
+            # Generate SHA256 hash of the address
+            address_hash = hashlib.sha256(full_address.encode('utf-8')).hexdigest()
+            
             # Create node properties JSON
             node_properties = {
-                "ADDRESS_FULL": full_address
+                "ADDRESS_FULL": full_address,
+                "ADDRESS_HASH": address_hash
             }
             
             # Add to data list

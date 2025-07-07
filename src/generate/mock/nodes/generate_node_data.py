@@ -5,7 +5,7 @@ import json
 import os
 
 # Configuration
-NUM_NODE_RECORDS = 1000000  # Number of node records to generate
+NUM_NODE_RECORDS = 10000  # Number of node records to generate
 NUM_NODE_RECORDS_PER_BATCH = 1000
 #NODE_TYPES = ['person', 'name', 'address', 'anumber', 'receipt', 'form', 'email', 'phone']
 
