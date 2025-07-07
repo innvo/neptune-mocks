@@ -20,8 +20,6 @@ class ColoredFormatter(logging.Formatter):
             record.msg = f"{Fore.CYAN}{record.msg}{Style.RESET_ALL}"
         elif record.levelno == logging.INFO:
             record.msg = f"{Fore.GREEN}{record.msg}{Style.RESET_ALL}"
-        elif record.levelno == logging.WARNING:
-            record.msg = f"{Fore.YELLOW}{record.msg}{Style.RESET_ALL}"
         elif record.levelno == logging.ERROR:
             record.msg = f"{Fore.RED}{record.msg}{Style.RESET_ALL}"
         return super().format(record)
@@ -66,7 +64,7 @@ class NeptuneBulkLoader:
             response = self.s3_client.list_objects_v2(Bucket=bucket_name)
             
             if 'Contents' not in response:
-                logger.warning(f"No files found in bucket {bucket_name}")
+                logger.info(f"No files found in bucket {bucket_name}")
                 return []
                 
             files = []
@@ -163,7 +161,7 @@ class NeptuneBulkLoader:
             # Get list of files
             files = self.get_files_from_s3(bucket_name)
             if not files:
-                logger.warning("No files to load")
+                logger.info("No files to load")
                 return
                 
             total_files = len(files)
@@ -204,6 +202,15 @@ class NeptuneBulkLoader:
             print_header("Load Process Completed")
             print(f"{Fore.GREEN}✓ All {total_files} files loaded successfully{Style.RESET_ALL}")
             print(f"⏱️  Total duration: {duration}")
+            
+            # Summary section
+            print_header("Summary")
+            print(f"{Fore.CYAN}Files Processed:{Style.RESET_ALL} {total_files}")
+            print(f"{Fore.CYAN}Load Jobs Submitted:{Style.RESET_ALL} {len(load_ids)}")
+            print(f"{Fore.CYAN}Load Jobs Completed:{Style.RESET_ALL} {len(completed)}")
+            print(f"{Fore.CYAN}Total Duration:{Style.RESET_ALL} {duration}")
+            print(f"{Fore.CYAN}Average Time per File:{Style.RESET_ALL} {duration / total_files if total_files > 0 else 'N/A'}")
+            print(f"{Fore.CYAN}Status:{Style.RESET_ALL} {Fore.GREEN}SUCCESS{Style.RESET_ALL}")
             
         except Exception as e:
             logger.error(f"Script failed: {str(e)}")
