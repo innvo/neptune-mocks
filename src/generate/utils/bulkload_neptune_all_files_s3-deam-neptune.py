@@ -2,11 +2,17 @@ import boto3
 import requests
 import logging
 from typing import Dict, List
-import time
 import json
 from colorama import init, Fore, Style
 from datetime import datetime
 import sys
+import urllib3
+import warnings
+from urllib3.exceptions import InsecureRequestWarning
+
+# Suppress SSL warnings for localhost development
+urllib3.disable_warnings(InsecureRequestWarning)
+warnings.filterwarnings('ignore', message='Unverified HTTPS request')
 
 # Initialize colorama
 init()
@@ -20,13 +26,15 @@ class ColoredFormatter(logging.Formatter):
             record.msg = f"{Fore.CYAN}{record.msg}{Style.RESET_ALL}"
         elif record.levelno == logging.INFO:
             record.msg = f"{Fore.GREEN}{record.msg}{Style.RESET_ALL}"
+        elif record.levelno == logging.WARNING:
+            record.msg = f"{Fore.YELLOW}{record.msg}{Style.RESET_ALL}"
         elif record.levelno == logging.ERROR:
             record.msg = f"{Fore.RED}{record.msg}{Style.RESET_ALL}"
         return super().format(record)
 
 # Configure logging
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.WARNING)  # Only show warnings and errors
 
 # Create console handler with colored formatter
 console_handler = logging.StreamHandler()
@@ -55,20 +63,29 @@ class NeptuneBulkLoader:
     def __init__(self, neptune_endpoint: str = "https://localhost:8182"):
         self.neptune_endpoint = neptune_endpoint
         self.s3_client = boto3.client('s3')
-        logger.debug(f"Initialized NeptuneBulkLoader with endpoint: {neptune_endpoint}")
+        
+        # Configure requests session for better SSL handling
+        self.session = requests.Session()
+        if 'localhost' in neptune_endpoint or '127.0.0.1' in neptune_endpoint:
+            self.session.verify = False
+            logger.info(f"SSL verification disabled for localhost endpoint: {neptune_endpoint}")
+        else:
+            logger.info(f"SSL verification enabled for endpoint: {neptune_endpoint}")
+            
+        logger.info(f"Initialized NeptuneBulkLoader with endpoint: {neptune_endpoint}")
         
     def get_files_from_s3(self, bucket_name: str) -> List[Dict]:
-        """Get list of CSV files from S3 bucket."""
+        """Get list of CSV files from S3 bucket, separated into nodes and edges."""
         try:
-            logger.debug(f"Listing objects in S3 bucket: {bucket_name}")
             response = self.s3_client.list_objects_v2(Bucket=bucket_name)
             
             if 'Contents' not in response:
-                logger.info(f"No files found in bucket {bucket_name}")
-                return []
+                print(f"No files found in bucket {bucket_name}")
+                return [], []
                 
-            files = []
-            print_header("Found CSV Files in S3")
+            node_files = []
+            edge_files = []
+            
             for obj in response['Contents']:
                 file_key = obj['Key']
                 # Skip non-CSV files
@@ -81,17 +98,49 @@ class NeptuneBulkLoader:
                     'source': f"s3://{bucket_name}/{file_key}",
                     'format': 'csv',
                     'size': file_size,
-                    'last_modified': last_modified
+                    'last_modified': last_modified,
+                    'key': file_key
                 }
-                print(f"{Fore.CYAN}• {file_key}{Style.RESET_ALL}")
-                print(f"  Size: {file_size:,} bytes")
-                print(f"  Last Modified: {last_modified}")
-                print(f"  Format: CSV\n")
-                files.append(file_info)
-            return files
+                
+                # Categorize files as nodes or edges based on filename
+                if self._is_edge_file(file_key):
+                    edge_files.append(file_info)
+                else:
+                    node_files.append(file_info)
+                    
+            return node_files, edge_files
         except Exception as e:
-            logger.error(f"Error listing S3 files: {str(e)}")
+            print(f"Error listing S3 files: {str(e)}")
             raise
+    
+    def _is_edge_file(self, file_key: str) -> bool:
+        """Determine if a file contains edge data based on filename patterns."""
+        file_lower = file_key.lower()
+        
+        # Check for explicit edge pattern
+        if '_edges_' in file_lower:
+            return True
+            
+        # Check for explicit node pattern
+        if '_nodes_' in file_lower:
+            return False
+            
+        # Fallback to common edge file patterns
+        edge_patterns = [
+            'edge', 'edges', 'relationship', 'relationships',
+            'person-', 'person_', '-person', '_person',
+            'address-', 'address_', '-address', '_address',
+            'receipt-', 'receipt_', '-receipt', '_receipt',
+            'name-', 'name_', '-name', '_name',
+            'form-', 'form_', '-form', '_form'
+        ]
+        
+        # Check if filename contains any edge patterns
+        for pattern in edge_patterns:
+            if pattern in file_lower:
+                return True
+                
+        return False
             
     def submit_load_job(self, file_info: Dict) -> str:
         """Submit a load job to Neptune bulk loader."""
@@ -107,11 +156,10 @@ class NeptuneBulkLoader:
                 "queueRequest": "TRUE"
             }
             
-            logger.debug(f"Submitting load job for: {file_info['source']}")
-            response = requests.post(
+            response = self.session.post(
                 f"{self.neptune_endpoint}/loader",
                 json=payload,
-                verify=False
+                timeout=30
             )
             response.raise_for_status()
             
@@ -120,100 +168,98 @@ class NeptuneBulkLoader:
             if not load_id:
                 raise ValueError("No load ID returned from Neptune")
                 
-            logger.info(f"✓ Load job submitted successfully for {file_info['source']}")
             return load_id
             
         except Exception as e:
-            logger.error(f"✗ Error submitting load job: {str(e)}")
+            print(f"Error submitting load job for {file_info.get('key', 'unknown')}: {str(e)}")
             raise
             
-    def check_load_status(self, load_id: str) -> bool:
-        """Check the status of a load job."""
-        try:
-            response = requests.get(
-                f"{self.neptune_endpoint}/loader/{load_id}",
-                verify=False
-            )
-            response.raise_for_status()
-            
-            response_data = response.json()
-            status = response_data.get('status')
-            
-            if status == "LOAD_COMPLETED":
-                return True
-            elif status in ["LOAD_FAILED", "LOAD_CANCELLED"]:
-                error_details = response_data.get('details', {})
-                logger.error(f"Load job failed. Status: {status}, Details: {json.dumps(error_details)}")
-                raise Exception(f"Load job failed with status: {status}")
-                
-            return False
-            
-        except Exception as e:
-            logger.error(f"Error checking load status: {str(e)}")
-            raise
+
             
     def load_all_files(self, bucket_name: str):
-        """Load all files from S3 bucket into Neptune."""
+        """Load all files from S3 bucket into Neptune - nodes first, then edges."""
+        start_time = datetime.now()
+        
         try:
-            print_header("Starting Neptune Bulk Load Process")
-            start_time = datetime.now()
+            # Get list of files separated into nodes and edges
+            node_files, edge_files = self.get_files_from_s3(bucket_name)
             
-            # Get list of files
-            files = self.get_files_from_s3(bucket_name)
-            if not files:
-                logger.info("No files to load")
+            if not node_files and not edge_files:
+                print("No files to load")
                 return
                 
-            total_files = len(files)
-            logger.info(f"Found {total_files} files to load")
+            total_files = len(node_files) + len(edge_files)
+            print(f"Found {len(node_files)} node files and {len(edge_files)} edge files to submit")
             
-            # Submit load jobs
-            print_header("Submitting Load Jobs")
-            load_ids = []
-            for i, file_info in enumerate(files, 1):
-                print_progress(i, total_files, prefix='Submitting:', suffix=f'({i}/{total_files})')
-                load_id = self.submit_load_job(file_info)
-                load_ids.append(load_id)
-            print()  # New line after progress bar
+            job_results = []  # List of {file_key, load_id, status, type}
             
-            # Monitor load jobs
-            print_header("Monitoring Load Jobs")
-            completed = set()
-            total_jobs = len(load_ids)
+            # Load nodes first
+            if node_files:
+                print(f"\n{Fore.BLUE}Loading {len(node_files)} node files...{Style.RESET_ALL}")
+                for i, file_info in enumerate(node_files, 1):
+                    print_progress(i, len(node_files), prefix='Nodes:', suffix=f'({i}/{len(node_files)})')
+                    try:
+                        load_id = self.submit_load_job(file_info)
+                        job_results.append({
+                            'file_key': file_info['key'],
+                            'load_id': load_id,
+                            'status': 'SUBMITTED',
+                            'type': 'NODE'
+                        })
+                    except Exception as e:
+                        job_results.append({
+                            'file_key': file_info['key'],
+                            'load_id': 'FAILED',
+                            'status': f'ERROR: {str(e)}',
+                            'type': 'NODE'
+                        })
+                print()  # New line after progress bar
             
-            while len(completed) < total_jobs:
-                for i, load_id in enumerate(load_ids):
-                    if load_id not in completed:
-                        if self.check_load_status(load_id):
-                            completed.add(load_id)
-                            print_progress(
-                                len(completed),
-                                total_jobs,
-                                prefix='Progress:',
-                                suffix=f'({len(completed)}/{total_jobs})'
-                            )
-                if len(completed) < total_jobs:
-                    time.sleep(10)
-            print()  # New line after progress bar
+            # Load edges second
+            if edge_files:
+                print(f"\n{Fore.BLUE}Loading {len(edge_files)} edge files...{Style.RESET_ALL}")
+                for i, file_info in enumerate(edge_files, 1):
+                    print_progress(i, len(edge_files), prefix='Edges:', suffix=f'({i}/{len(edge_files)})')
+                    try:
+                        load_id = self.submit_load_job(file_info)
+                        job_results.append({
+                            'file_key': file_info['key'],
+                            'load_id': load_id,
+                            'status': 'SUBMITTED',
+                            'type': 'EDGE'
+                        })
+                    except Exception as e:
+                        job_results.append({
+                            'file_key': file_info['key'],
+                            'load_id': 'FAILED',
+                            'status': f'ERROR: {str(e)}',
+                            'type': 'EDGE'
+                        })
+                print()  # New line after progress bar
             
-            end_time = datetime.now()
-            duration = end_time - start_time
+            # Print final report
+            print_header("Job Submission Report")
+            print(f"{Fore.CYAN}Total Files Found:{Style.RESET_ALL} {total_files}")
+            print(f"{Fore.CYAN}Node Files:{Style.RESET_ALL} {len(node_files)}")
+            print(f"{Fore.CYAN}Edge Files:{Style.RESET_ALL} {len(edge_files)}")
+            print(f"{Fore.CYAN}Jobs Submitted Successfully:{Style.RESET_ALL} {len([j for j in job_results if j['status'] == 'SUBMITTED'])}")
+            print(f"{Fore.CYAN}Jobs Failed:{Style.RESET_ALL} {len([j for j in job_results if j['status'] != 'SUBMITTED'])}")
+            print(f"{Fore.CYAN}Submission Time:{Style.RESET_ALL} {datetime.now() - start_time}")
             
-            print_header("Load Process Completed")
-            print(f"{Fore.GREEN}✓ All {total_files} files loaded successfully{Style.RESET_ALL}")
-            print(f"⏱️  Total duration: {duration}")
+            # Print all jobs in submission order
+            print(f"\n{Fore.CYAN}Job Details (in submission order):{Style.RESET_ALL}")
+            print(f"{'Type':<6} {'File':<50} {'Job ID':<40} {'Status'}")
+            print("-" * 106)
             
-            # Summary section
-            print_header("Summary")
-            print(f"{Fore.CYAN}Files Processed:{Style.RESET_ALL} {total_files}")
-            print(f"{Fore.CYAN}Load Jobs Submitted:{Style.RESET_ALL} {len(load_ids)}")
-            print(f"{Fore.CYAN}Load Jobs Completed:{Style.RESET_ALL} {len(completed)}")
-            print(f"{Fore.CYAN}Total Duration:{Style.RESET_ALL} {duration}")
-            print(f"{Fore.CYAN}Average Time per File:{Style.RESET_ALL} {duration / total_files if total_files > 0 else 'N/A'}")
-            print(f"{Fore.CYAN}Status:{Style.RESET_ALL} {Fore.GREEN}SUCCESS{Style.RESET_ALL}")
+            for job in job_results:
+                job_type = job['type']
+                if job['status'] == 'SUBMITTED':
+                    print(f"{job_type:<6} {job['file_key']:<50} {job['load_id']:<40} {Fore.GREEN}SUBMITTED{Style.RESET_ALL}")
+                else:
+                    print(f"{job_type:<6} {job['file_key']:<50} {'FAILED':<40} {Fore.RED}{job['status']}{Style.RESET_ALL}")
             
         except Exception as e:
-            logger.error(f"Script failed: {str(e)}")
+            print(f"Script failed: {str(e)}")
             raise
 
 if __name__ == "__main__":
@@ -224,6 +270,9 @@ if __name__ == "__main__":
     try:
         loader = NeptuneBulkLoader(NEPTUNE_ENDPOINT)
         loader.load_all_files(S3_BUCKET)
+    except KeyboardInterrupt:
+        print("Process interrupted by user")
+        exit(0)
     except Exception as e:
-        logger.error(f"Script failed: {str(e)}")
+        print(f"Script failed: {str(e)}")
         exit(1)
