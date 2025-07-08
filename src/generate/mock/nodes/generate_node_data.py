@@ -9,7 +9,7 @@ NUM_NODE_RECORDS = 10000  # Number of node records to generate
 NUM_NODE_RECORDS_PER_BATCH = 2000
 #NODE_TYPES = ['person', 'name', 'address', 'anumber', 'receipt', 'form', 'email', 'phone']
 
-NODE_TYPES = ['person', 'address','receipt']
+NODE_TYPES = ['person', 'address','organization','receipt']
 
 # Ensure the data/input directory exists
 os.makedirs('src/data/input', exist_ok=True)
