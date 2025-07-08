@@ -16,6 +16,7 @@ def convert_to_gremlin():
         # Define all possible address columns with their types
         all_columns = {
             '~id': 'String',
+            'node_id:String': 'String',
             'node_name:String': 'String',
             'address_full:String': 'String',
             'address_hash:String': 'String',
@@ -44,6 +45,7 @@ def convert_to_gremlin():
             # Create the node with required fields
             node = {
                 '~id': address['node_id'],
+                'node_id:String': address['node_id'],  # Set node_id to the same value as ~id
                 'node_name:String': properties.get('STREET_ADDRESS_LINE1', '')  # Set node_name to street_address_line1
             }
             

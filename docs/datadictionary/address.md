@@ -10,6 +10,7 @@
         "~entityType": "node",
         "~labels": ["address"],
         "~properties": {
+          "node_id": "5500f610-2685-4c07-8155-8208f0932233",
           "node_name": "391 ELIZABETH PORT APT. 306",
           "address_full": "391 ELIZABETH PORT APT. 306, FLOOR 10, DENISEBURGH, NM, 65287, UNITED STATES",
           "address_hash": "0d36cb34ab593ddd3dc32a2f695b7c4901d4a814e6596edae3c443b8e47f8e1b",
@@ -29,4 +30,4 @@
   ]
 }
  ```
-
+## Example OpenCypher Queries
