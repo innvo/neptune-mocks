@@ -234,7 +234,7 @@ def generate_mock_address_data():
             # Add to data list
             address_data.append({
                 'node_id': node_id,
-                'node_name': full_address,
+                'node_name': street_address_line1,
                 'node_properties': node_properties
             })
         

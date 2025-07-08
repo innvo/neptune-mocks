@@ -185,8 +185,8 @@ def generate_mock_building_data():
             # Generate unique building ID that doesn't conflict with existing address node_ids
             building_id = generate_unique_building_id(existing_node_ids, fake)
             
-            # Use the address full name as the building name
-            building_full_name = address_props.get('ADDRESS_FULL', 'UNKNOWN ADDRESS')
+            # Use the street address line 1 as the building name
+            building_full_name = address_props.get('STREET_ADDRESS_LINE1', 'UNKNOWN ADDRESS')
             
             # Create node properties JSON - copy address properties including ADDRESS_HASH
             node_properties = address_props.copy()

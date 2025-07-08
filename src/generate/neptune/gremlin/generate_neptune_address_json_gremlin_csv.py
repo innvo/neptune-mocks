@@ -16,8 +16,8 @@ def convert_to_gremlin():
         # Define all possible address columns with their types
         all_columns = {
             '~id': 'String',
-            'node_id:String': 'String',
-            'node_name:String': 'String',
+            'node_id': 'String',  # Remove type suffix for node_id
+            'node_name': 'String',  # Remove type suffix for node_name
             'address_full:String': 'String',
             'address_hash:String': 'String',
             'street_address_line1:String': 'String',
@@ -45,8 +45,8 @@ def convert_to_gremlin():
             # Create the node with required fields
             node = {
                 '~id': address['node_id'],
-                'node_id:String': address['node_id'],  # Set node_id to the same value as ~id
-                'node_name:String': properties.get('STREET_ADDRESS_LINE1', '')  # Set node_name to street_address_line1
+                'node_id': address['node_id'],  # Set node_id to the same value as ~id
+                'node_name': address['node_name']  # Use the node_name from the JSON
             }
             
             # Add all properties from the JSON with appropriate type suffixes
@@ -89,6 +89,12 @@ def convert_to_gremlin():
         # Ensure ~label is last
         ordered_cols.remove('~label')
         ordered_cols.append('~label')
+        
+        # Ensure node_id and node_name come right after ~id
+        ordered_cols.remove('~id')
+        ordered_cols.remove('node_id')
+        ordered_cols.remove('node_name')
+        ordered_cols = ['~id', 'node_id', 'node_name'] + [col for col in ordered_cols if col not in ['~id', 'node_id', 'node_name', '~label']] + ['~label']
         
         # Reorder the DataFrame columns
         nodes_df = nodes_df[ordered_cols]
