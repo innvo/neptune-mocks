@@ -112,7 +112,8 @@ def upload_files_to_s3(local_dir: str, s3_bucket: str, s3_prefix: str = ''):
         if not local_path.exists():
             raise FileNotFoundError(f"Directory {local_dir} does not exist")
             
-        files = [f for f in local_path.iterdir() if f.is_file()]
+        # Only upload CSV files
+        files = [f for f in local_path.iterdir() if f.is_file() and f.suffix.lower() == '.csv']
         
         if not files:
             logger.warning(f"No files found in {local_dir}")
