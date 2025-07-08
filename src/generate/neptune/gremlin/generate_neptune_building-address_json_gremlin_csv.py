@@ -3,19 +3,20 @@ import json
 import os
 from tqdm import tqdm
 
-# Removed convert_address_nodes()
-
-def convert_person_address_edges():
+def convert_building_address_edges():
     try:
-        # Read the mock person-address data from JSON
-        print("\nReading mock person-address data...")
-        with open('src/data/output/gds/mock_person-address_data.json', 'r') as f:
+        # Ensure output directory exists
+        os.makedirs('src/data/output/neptune', exist_ok=True)
+        
+        # Read the mock building-address data from JSON
+        print("Reading mock building-address data...")
+        with open('src/data/output/gds/mock_building-address_data.json', 'r') as f:
             edge_data = json.load(f)
         
         # Initialize list to store converted edges
         edges = []
         
-        print("\nConverting person-address edges to Gremlin format...")
+        print("\nConverting building-address edges to Gremlin format...")
         for edge in tqdm(edge_data, desc="Processing edges"):
             # Create the edge with required fields
             edge_record = {
@@ -27,7 +28,11 @@ def convert_person_address_edges():
             
             # Add all properties from the JSON
             for key, value in edge['edge_properties'].items():
-                edge_record[f'{key.lower()}:String'] = str(value)
+                # Convert property name to lowercase for String suffix
+                if isinstance(value, (int, float)):
+                    edge_record[f'{key.lower()}:Double'] = float(value)
+                else:
+                    edge_record[f'{key.lower()}:String'] = str(value)
             
             edges.append(edge_record)
         
@@ -41,20 +46,22 @@ def convert_person_address_edges():
         edges_df = edges_df[cols]
         
         # Save to CSV with proper quoting
-        output_path = 'src/data/output/neptune/neptune_person_address_edges_gremlin.csv'
+        output_path = 'src/data/output/neptune/neptune_building-address_edges_gremlin.csv'
         edges_df.to_csv(output_path, index=False, quoting=1, quotechar='"', escapechar='\\')
         
-        print(f"\nGenerated {len(edges)} person-address edges")
+        print(f"\nGenerated {len(edges)} building-address edges")
         print(f"Saved to {output_path}")
         return True
         
     except Exception as e:
-        print(f"Error converting person-address edges: {str(e)}")
+        print(f"Error converting building-address edges: {str(e)}")
         return False
 
 def convert_to_gremlin():
-    # Only convert person-address edges
-    return convert_person_address_edges()
+    # Convert building-address edges
+    edges_success = convert_building_address_edges()
+    
+    return edges_success
 
 if __name__ == "__main__":
-    convert_to_gremlin() 
+    convert_to_gremlin()
