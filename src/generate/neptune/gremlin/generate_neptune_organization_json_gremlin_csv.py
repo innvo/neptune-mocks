@@ -28,6 +28,10 @@ def convert_to_gremlin():
                 '~id': organization['node_id']
             }
             
+            # Add node_id and node_name as explicit properties
+            node['node_id:String'] = organization['node_id']
+            node['node_name:String'] = organization['node_name']
+            
             # Add all properties from the JSON
             for key, value in properties.items():
                 if isinstance(value, list):
