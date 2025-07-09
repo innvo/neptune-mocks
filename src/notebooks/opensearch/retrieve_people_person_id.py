@@ -1,0 +1,53 @@
+## Retrieve a person by person_id
+
+import subprocess
+import json
+
+# Person ID to search for (you can change this to any person ID you want to find)
+person_id = "person-100"
+
+# Query to get a specific person by ID
+query = {
+    "query": {
+        "term": {
+            "id.keyword": person_id
+        }
+    },
+    "_source": True,
+    "size": 1
+}
+
+result = subprocess.run([
+    'curl', '-X', 'POST', 
+    'http://localhost:9200/people/_search',
+    '-H', 'Content-Type: application/json',
+    '-d', json.dumps(query)
+], capture_output=True, text=True)
+
+# Parse and display the response
+try:
+    response_json = json.loads(result.stdout)
+    
+    if 'hits' in response_json and 'hits' in response_json['hits']:
+        hits = response_json['hits']['hits']
+        if hits:
+            print(f"Found {len(hits)} record(s) for person_id '{person_id}':")
+            print("=" * 50)
+            
+            for i, hit in enumerate(hits, 1):
+                print(f"\nRecord {i}:")
+                print(json.dumps(hit['_source'], indent=2))
+                print("-" * 30)
+        else:
+            print(f"No records found for person_id '{person_id}'")
+            print("Response:", json.dumps(response_json, indent=2))
+    else:
+        print("Unexpected response format:")
+        print(json.dumps(response_json, indent=2))
+        
+except json.JSONDecodeError:
+    print("Raw response:")
+    print(result.stdout)
+    if result.stderr:
+        print("Error:")
+        print(result.stderr) 

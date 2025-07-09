@@ -71,9 +71,8 @@ def main():
         "src/generate/mock/edges/generate_mock_person-address_edge.py",
         "src/generate/mock/edges/generate_mock_person-name_edge.py",
         "src/generate/mock/edges/generate_mock_person-organization_edge.py",
-        "src/generate/mock/edges/generate_mock_person-reciept_edge.py"
-    
-         
+        "src/generate/mock/edges/generate_mock_person-reciept_edge.py",
+        "src/generate/mock/edges/generate_mock_organization-organization_edge.py"
     ]
 
     neptune_scripts = [
