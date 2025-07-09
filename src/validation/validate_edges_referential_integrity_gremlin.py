@@ -200,6 +200,56 @@ def validate_person_organization_edges():
         print(f"Error during validation: {str(e)}")
         return False
 
+def validate_organization_address_edges():
+    try:
+        # Read the node data
+        print("\nReading organization nodes...")
+        organization_nodes_df = pd.read_csv('src/data/output/neptune/nepture_organization_nodes_gremlin.csv')
+        organization_ids = set(organization_nodes_df['~id'])
+        print(f"Found {len(organization_ids)} unique organization nodes")
+        
+        print("\nReading address nodes...")
+        address_nodes_df = pd.read_csv('src/data/output/neptune/neptune_address_nodes_gremlin.csv')
+        address_ids = set(address_nodes_df['~id'])
+        print(f"Found {len(address_ids)} unique address nodes")
+        
+        # Read the edge data
+        print("\nReading organization-address edges...")
+        edges_df = pd.read_csv('src/data/output/neptune/neptune_organization-address_edges_gremlin.csv')
+        print(f"Found {len(edges_df)} edges to validate")
+        
+        # Check for missing source nodes (organization IDs)
+        missing_from = set(edges_df['~from']) - organization_ids
+        if missing_from:
+            print(f"\nERROR: Found {len(missing_from)} edges with missing source nodes:")
+            for node_id in missing_from:
+                print(f"  - Edge source node {node_id} not found in organization nodes file")
+        
+        # Check for missing target nodes (address IDs)
+        missing_to = set(edges_df['~to']) - address_ids
+        if missing_to:
+            print(f"\nERROR: Found {len(missing_to)} edges with missing target nodes:")
+            for node_id in missing_to:
+                print(f"  - Edge target node {node_id} not found in address nodes file")
+        
+        # Print summary
+        total_errors = len(missing_from) + len(missing_to)
+        if total_errors == 0:
+            print("\nSUCCESS: All organization-address edges have valid source and target nodes!")
+        else:
+            print(f"\nFAILURE: Found {total_errors} referential integrity errors in organization-address edges")
+            print(f"  - {len(missing_from)} missing source nodes")
+            print(f"  - {len(missing_to)} missing target nodes")
+        
+        return total_errors == 0
+        
+    except FileNotFoundError as e:
+        print(f"Error: Required file not found - {str(e)}")
+        return False
+    except Exception as e:
+        print(f"Error during validation: {str(e)}")
+        return False
+
 def validate_edges():
     print("\n=== Starting Gremlin CSV Validation ===")
     
@@ -211,6 +261,7 @@ def validate_edges():
     validation_results['person_receipt'] = validate_person_receipt_edges()
     validation_results['building_address'] = validate_building_address_edges()
     validation_results['person_organization'] = validate_person_organization_edges()
+    validation_results['organization_address'] = validate_organization_address_edges()
     
     # Print comprehensive summary
     print("\n" + "="*60)

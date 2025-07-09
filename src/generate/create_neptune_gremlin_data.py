@@ -66,11 +66,14 @@ def main():
     ]
 
     edge_scripts = [
-        "src/generate/mock/edges/generate_mock_person-address_edge.py",
-        "src/generate/mock/edges/generate_mock_person-reciept_edge.py",
-        "src/generate/mock/edges/generate_mock_person-name_edge.py",
         "src/generate/mock/edges/generate_mock_building-address_edge.py",
-        "src/generate/mock/edges/generate_mock_person-organization_edge.py"
+        "src/generate/mock/edges/generate_mock_organization-address_edge.py",
+        "src/generate/mock/edges/generate_mock_person-address_edge.py",
+        "src/generate/mock/edges/generate_mock_person-name_edge.py",
+        "src/generate/mock/edges/generate_mock_person-organization_edge.py",
+        "src/generate/mock/edges/generate_mock_person-reciept_edge.py"
+    
+         
     ]
 
     neptune_scripts = [
@@ -78,10 +81,11 @@ def main():
         "src/generate/neptune/gremlin/generate_neptune_address_json_gremlin_csv.py",
         "src/generate/neptune/gremlin/generate_neptune_building_json_gremlin_csv.py",
         "src/generate/neptune/gremlin/generate_neptune_organization_json_gremlin_csv.py",
-        "src/generate/neptune/gremlin/generate_neptune_person-address_json_gremlin_csv.py",
-        "src/generate/neptune/gremlin/generate_neptune_person-receipt_json_gremlin_csv.py",
         "src/generate/neptune/gremlin/generate_neptune_building-address_json_gremlin_csv.py",
-        "src/generate/neptune/gremlin/generate_neptune_person-organization_json_gremlin_csv.py"
+        "src/generate/neptune/gremlin/generate_neptune_organization-address_json_gremlin_csv.py",
+        "src/generate/neptune/gremlin/generate_neptune_person-address_json_gremlin_csv.py",
+        "src/generate/neptune/gremlin/generate_neptune_person-organization_json_gremlin_csv.py",
+        "src/generate/neptune/gremlin/generate_neptune_person-receipt_json_gremlin_csv.py"
     ]
 
     validation_scripts = [

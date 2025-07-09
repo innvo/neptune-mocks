@@ -49,11 +49,12 @@ def validate_referential_integrity(edges, building_df, address_df):
         building_address_hashes[building_id] = address_hash
         validation_results['edges_per_building'][building_id] = 0
     
-    address_hash_to_id = {}
+    # Create address hash mapping for validation
+    address_id_to_hash = {}
     for _, address in address_df.iterrows():
         address_id = address['node_id']
         address_hash = address['node_properties']['ADDRESS_HASH']
-        address_hash_to_id[address_hash] = address_id
+        address_id_to_hash[address_id] = address_hash
     
     # Update total counts
     validation_results['node_type_stats']['building']['total'] = len(valid_building_ids)
@@ -75,11 +76,7 @@ def validate_referential_integrity(edges, building_df, address_df):
         address_hash_match = False
         if from_node_exists and to_node_exists:
             building_hash = building_address_hashes.get(from_node)
-            address_hash = None
-            for _, address in address_df.iterrows():
-                if address['node_id'] == to_node:
-                    address_hash = address['node_properties']['ADDRESS_HASH']
-                    break
+            address_hash = address_id_to_hash.get(to_node)
             
             if building_hash and address_hash and building_hash == address_hash:
                 address_hash_match = True
