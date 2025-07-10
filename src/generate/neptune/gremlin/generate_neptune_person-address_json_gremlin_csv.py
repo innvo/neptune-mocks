@@ -22,7 +22,7 @@ def convert_person_address_edges():
                 '~id': edge['edge_id'],
                 '~from': edge['node_id_from'],
                 '~to': edge['node_id_to'],
-                '~label': edge['edge_type']
+                '~label': f"{edge['edge_type']};primary"
             }
             
             # Add all properties from the JSON

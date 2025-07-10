@@ -4,7 +4,7 @@ import subprocess
 import json
 
 # Partial street name to search for (you can change this to any partial street name you want to find)
-partial_street = "3684 Christopher" 
+partial_street = "93391 Phillip Ridges" 
 
 # First, let's check if the index exists and what's in it
 print("Checking if the 'people' index exists...")
@@ -71,14 +71,14 @@ query = {
                     "nested": {
                         "path": "addresses",
                         "query": {
-                            "match": {
+                            "match_phrase": {
                                 "addresses.street": partial_street
                             }
                         }
                     }
                 },
                 {
-                    "match": {
+                    "match_phrase": {
                         "addresses.street": partial_street
                     }
                 }
@@ -121,6 +121,39 @@ try:
     else:
         print("Unexpected response format:")
         print(json.dumps(response_json, indent=2))
+    
+    # Add summary section
+    print("\n" + "="*60)
+    print("SUMMARY")
+    print("="*60)
+    
+    if 'hits' in response_json and 'hits' in response_json['hits']:
+        total_hits = response_json['hits']['total']['value'] if 'total' in response_json['hits'] else len(response_json['hits']['hits'])
+        print(f"Search Term: '{partial_street}'")
+        print(f"Total Results: {total_hits}")
+        print(f"Results Shown: {len(response_json['hits']['hits'])}")
+        
+        if response_json['hits']['hits']:
+            print("\nMatching Addresses Found:")
+            for i, hit in enumerate(response_json['hits']['hits'], 1):
+                person_id = hit['_source'].get('id', 'Unknown')
+                names = hit['_source'].get('names', [])
+                primary_name = names[0] if names else 'Unknown'
+                
+                # Find matching addresses
+                addresses = hit['_source'].get('addresses', [])
+                matching_addresses = []
+                for addr in addresses:
+                    if partial_street.lower() in addr.get('street', '').lower():
+                        matching_addresses.append(addr['street'])
+                
+                print(f"  {i}. Person: {primary_name} (ID: {person_id})")
+                for addr in matching_addresses:
+                    print(f"     - {addr}")
+        else:
+            print("No matching addresses found.")
+    else:
+        print("Unable to generate summary due to unexpected response format.")
         
 except json.JSONDecodeError:
     print("Raw response:")

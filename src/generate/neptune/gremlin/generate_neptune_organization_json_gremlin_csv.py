@@ -53,8 +53,8 @@ def convert_to_gremlin():
                 else:
                     node[f'{key.lower()}:String'] = str(value)
             
-            # Add organization label
-            node['~label'] = 'organization'
+            # Add organization and primary labels
+            node['~label'] = 'organization;primary'
             
             nodes.append(node)
         

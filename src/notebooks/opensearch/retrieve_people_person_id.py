@@ -4,7 +4,7 @@ import subprocess
 import json
 
 # Person ID to search for (you can change this to any person ID you want to find)
-person_id = "person-100"
+person_id = "person-1000000"
 
 # Query to get a specific person by ID
 query = {

@@ -20,7 +20,7 @@ def convert_person_organization_edges():
                 '~id': edge['edge_id'],
                 '~from': edge['node_id_from'],
                 '~to': edge['node_id_to'],
-                '~label': edge['edge_type']
+                '~label': 'person_organization;primary'
             }
             
             # Add all properties from the JSON

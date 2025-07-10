@@ -119,8 +119,8 @@ def convert_to_gremlin():
                 else:
                     node[f'{key.lower()}:String'] = str(value)
             
-            # Add receipt label
-            node['~label'] = 'receipt'
+            # Add receipt and primary labels
+            node['~label'] = 'receipt;primary'
             
             nodes.append(node)
         

@@ -71,7 +71,7 @@ def convert_to_gremlin():
                     node[f'{key.lower()}:String'] = str(value)
             
             # Add person label
-            node['~label'] = 'person'
+            node['~label'] = 'person;primary'
             
             nodes.append(node)
         

@@ -8,29 +8,29 @@ def convert_to_gremlin():
         # Ensure output directory exists
         os.makedirs('src/data/output/neptune', exist_ok=True)
         
-        # Read the mock address data from JSON
-        print("Reading mock address data...")
-        with open('src/data/output/gds/mock_address_data.json', 'r') as f:
-            address_data = json.load(f)
+        # Read the mock form data from JSON
+        print("Reading mock form data...")
+        with open('src/data/output/gds/mock_form_data.json', 'r') as f:
+            form_data = json.load(f)
         
-        # Define all possible address columns with their types
+        # Define all possible form columns with their types
         all_columns = {
             '~id': 'String',
             'node_id': 'String',  # Remove type suffix for node_id
             'node_name': 'String',  # Remove type suffix for node_name
-            'address_full:String': 'String',
-            'address_hash:String': 'String',
-            'street_address_line1:String': 'String',
-            'street_address_line2:String': 'String',
-            'city:String': 'String',
-            'state_province:String': 'String',
-            'country:String': 'String',
-            'postal_code:String': 'String',
-            'zip_code5:String': 'String',
-            'zip_code_plus4:String': 'String',
-            'latitude:Double': 'Double',
-            'longitude:Double': 'Double',
-            'mailability_score:Int': 'Int',
+            'form_id:String': 'String',
+            'form_number:String': 'String',
+            'form_type:String': 'String',
+            'form_category:String': 'String',
+            'form_status:String': 'String',
+            'form_date:String': 'String',
+            'version_number:Int': 'Int',
+            'filing_fee:Int': 'Int',
+            'processing_time_days:Int': 'Int',
+            'is_electronic:Boolean': 'Boolean',
+            'is_urgent:Boolean': 'Boolean',
+            'has_attachments:Boolean': 'Boolean',
+            'attachment_count:Int': 'Int',
             '~label': 'String'
         }
         
@@ -38,35 +38,38 @@ def convert_to_gremlin():
         nodes = []
         
         print("\nConverting data to Gremlin format...")
-        for address in tqdm(address_data, desc="Processing nodes"):
+        for form in tqdm(form_data, desc="Processing nodes"):
             # Get the node properties
-            properties = address['node_properties']
+            properties = form['node_properties']
             
             # Create the node with required fields
             node = {
-                '~id': address['node_id'],
-                'node_id': address['node_id'],  # Set node_id to the same value as ~id
-                'node_name': address['node_name']  # Use the node_name from the JSON
+                '~id': form['node_id'],
+                'node_id': form['node_id'],  # Set node_id to the same value as ~id
+                'node_name': form['node_name']  # Use the node_name from the JSON
             }
             
             # Add all properties from the JSON with appropriate type suffixes
             for key, value in properties.items():
                 # Determine the appropriate type suffix based on the value type
-                if isinstance(value, (int, float)):
-                    # Handle numeric values
-                    if key in ['LATITUDE', 'LONGITUDE']:
-                        node[f'{key.lower()}:Double'] = float(value)
-                    elif key == 'MAILABILITY_SCORE':
+                if isinstance(value, bool):
+                    # Handle boolean values
+                    node[f'{key.lower()}:Boolean'] = value
+                elif isinstance(value, int):
+                    # Handle integer values
+                    node[f'{key.lower()}:Int'] = int(value)
+                elif isinstance(value, float):
+                    # Handle float values (convert to Int if it's a whole number)
+                    if value.is_integer():
                         node[f'{key.lower()}:Int'] = int(value)
                     else:
-                        # Default to String for other numeric fields
-                        node[f'{key.lower()}:String'] = str(value)
+                        node[f'{key.lower()}:Double'] = float(value)
                 else:
                     # Handle string values
                     node[f'{key.lower()}:String'] = str(value)
             
-            # Add address and primary labels
-            node['~label'] = 'address;primary'
+            # Add form and primary labels
+            node['~label'] = 'form;primary'
             
             nodes.append(node)
         
@@ -80,6 +83,8 @@ def convert_to_gremlin():
                 if all_columns[col_name] == 'Double':
                     nodes_df[col_name] = None
                 elif all_columns[col_name] == 'Int':
+                    nodes_df[col_name] = None
+                elif all_columns[col_name] == 'Boolean':
                     nodes_df[col_name] = None
                 else:
                     nodes_df[col_name] = ''
@@ -100,7 +105,7 @@ def convert_to_gremlin():
         nodes_df = nodes_df[ordered_cols]
         
         # Save to CSV with proper quoting
-        output_path = 'src/data/output/neptune/neptune_address_nodes_gremlin.csv'
+        output_path = 'src/data/output/neptune/neptune_form_nodes_gremlin.csv'
         nodes_df.to_csv(output_path, index=False, quoting=1, quotechar='"', escapechar='\\')
         
         # Print sample record
@@ -118,4 +123,4 @@ def convert_to_gremlin():
         return False
 
 if __name__ == "__main__":
-    convert_to_gremlin() 
+    convert_to_gremlin()

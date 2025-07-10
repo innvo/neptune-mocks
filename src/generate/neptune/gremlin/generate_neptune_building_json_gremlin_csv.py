@@ -64,8 +64,8 @@ def convert_to_gremlin():
                     # Handle string values
                     node[f'{key.lower()}:String'] = str(value)
             
-            # Add building label
-            node['~label'] = 'building'
+            # Add building and primary labels
+            node['~label'] = 'building;primary'
             
             nodes.append(node)
         

@@ -3,6 +3,17 @@ import sys
 import os
 from pathlib import Path
 import glob
+import platform
+
+def clear_terminal():
+    """Clear the terminal screen based on the operating system."""
+    try:
+        if platform.system() == "Windows":
+            os.system('cls')
+        else:
+            os.system('clear')
+    except Exception as e:
+        print(f"Error clearing terminal: {str(e)}")
 
 def cleanup_output_directories():
     """Clean up output directories by removing JSON and CSV files."""
@@ -54,12 +65,16 @@ def run_script(script_path):
         return False
 
 def main():
+    # Clear terminal on startup
+    clear_terminal()
+    
     # Define the scripts to run in sequence
     node_scripts = [
         "src/generate/mock/nodes/generate_node_data.py",
         "src/generate/mock/nodes/generate_mock_person_data_json.py",
         "src/generate/mock/nodes/generate_mock_address_data_json.py",
         "src/generate/mock/nodes/generate_mock_building_data_json.py",
+        "src/generate/mock/nodes/generate_mock_form_data_json.py",
         "src/generate/mock/nodes/generate_mock_receipt_data_json.py",
         "src/generate/mock/nodes/generate_mock_name_data_json.py",
         "src/generate/mock/nodes/generate_mock_organization_data_json.py"
@@ -69,20 +84,23 @@ def main():
         "src/generate/mock/edges/generate_mock_building-address_edge.py",
         "src/generate/mock/edges/generate_mock_organization-address_edge.py",
         "src/generate/mock/edges/generate_mock_person-address_edge.py",
+        "src/generate/mock/edges/generate_mock_person-form_edge.py",
         "src/generate/mock/edges/generate_mock_person-name_edge.py",
         "src/generate/mock/edges/generate_mock_person-organization_edge.py",
-        "src/generate/mock/edges/generate_mock_person-reciept_edge.py",
+        "src/generate/mock/edges/generate_mock_person-receipt_edge.py",
         "src/generate/mock/edges/generate_mock_organization-organization_edge.py"
     ]
 
     neptune_scripts = [
         "src/generate/neptune/gremlin/generate_neptune_person_json_gremlin_csv.py",
         "src/generate/neptune/gremlin/generate_neptune_address_json_gremlin_csv.py",
+        "src/generate/neptune/gremlin/generate_neptune_form_json_gremlin_csv.py",
         "src/generate/neptune/gremlin/generate_neptune_building_json_gremlin_csv.py",
         "src/generate/neptune/gremlin/generate_neptune_organization_json_gremlin_csv.py",
         "src/generate/neptune/gremlin/generate_neptune_building-address_json_gremlin_csv.py",
         "src/generate/neptune/gremlin/generate_neptune_organization-address_json_gremlin_csv.py",
         "src/generate/neptune/gremlin/generate_neptune_person-address_json_gremlin_csv.py",
+        "src/generate/neptune/gremlin/generate_neptune_person-form_json_gremlin_csv.py",
         "src/generate/neptune/gremlin/generate_neptune_person-organization_json_gremlin_csv.py",
         "src/generate/neptune/gremlin/generate_neptune_person-receipt_json_gremlin_csv.py"
     ]
