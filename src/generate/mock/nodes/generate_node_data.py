@@ -5,24 +5,57 @@ import json
 import os
 
 # Configuration
-NUM_NODE_RECORDS =10000 # Number of node records to generate
+NUM_NODE_RECORDS = 10000 # Number of node records to generate
 NUM_NODE_RECORDS_PER_BATCH = 1000
 #NODE_TYPES = ['person', 'name', 'address', 'anumber', 'receipt', 'form', 'email', 'phone']
 
-NODE_TYPES = ['person', 'address','anumber','form','organization','receipt']
+NODE_TYPES = ['person', 'address','anumber','datainstance','form','organization','receipt']
 
 # Ensure the data/input directory exists
 os.makedirs('src/data/input', exist_ok=True)
 
 def generate_node_data():
-    # Generate node data
+    # Calculate target counts for each node type to ensure proper distribution
+    # We want to ensure there are enough datainstance nodes for all persons
+    target_person_count = int(NUM_NODE_RECORDS * 0.15)  # 15% for persons
+    target_datainstance_count = max(target_person_count, int(NUM_NODE_RECORDS * 0.12))  # At least as many as persons, or 12%
+    
+    # Calculate remaining nodes for other types
+    remaining_nodes = NUM_NODE_RECORDS - target_person_count - target_datainstance_count
+    other_types = ['address', 'anumber', 'form', 'organization', 'receipt']
+    
+    # Distribute remaining nodes among other types
+    nodes_per_other_type = remaining_nodes // len(other_types)
+    extra_nodes = remaining_nodes % len(other_types)
+    
+    # Generate node data with controlled distribution
     node_data = {
-        'node_id': [str(uuid.uuid4()) for _ in range(NUM_NODE_RECORDS)],
-        'node_type': [random.choice(NODE_TYPES) for _ in range(NUM_NODE_RECORDS)]
+        'node_id': [],
+        'node_type': [],
+        'batch': []
     }
     
-    # Add batch column
-    node_data['batch'] = [i // NUM_NODE_RECORDS_PER_BATCH + 1 for i in range(NUM_NODE_RECORDS)]
+    # Add person nodes
+    for i in range(target_person_count):
+        node_data['node_id'].append(str(uuid.uuid4()))
+        node_data['node_type'].append('person')
+        node_data['batch'].append(i // NUM_NODE_RECORDS_PER_BATCH + 1)
+    
+    # Add datainstance nodes
+    for i in range(target_datainstance_count):
+        node_data['node_id'].append(str(uuid.uuid4()))
+        node_data['node_type'].append('datainstance')
+        node_data['batch'].append((target_person_count + i) // NUM_NODE_RECORDS_PER_BATCH + 1)
+    
+    # Add other type nodes
+    current_index = target_person_count + target_datainstance_count
+    for i, node_type in enumerate(other_types):
+        count = nodes_per_other_type + (1 if i < extra_nodes else 0)
+        for j in range(count):
+            node_data['node_id'].append(str(uuid.uuid4()))
+            node_data['node_type'].append(node_type)
+            node_data['batch'].append((current_index + j) // NUM_NODE_RECORDS_PER_BATCH + 1)
+        current_index += count
     
     # Create DataFrame
     node_df = pd.DataFrame(node_data)
@@ -76,5 +109,14 @@ if __name__ == "__main__":
     batch_counts = node_df['batch'].value_counts().sort_index()
     for batch_num, count in batch_counts.items():
         print(f"Batch {batch_num}: {count} nodes")
+
+    # Verify datainstance to person ratio
+    person_count = len(node_df[node_df['node_type'] == 'person'])
+    datainstance_count = len(node_df[node_df['node_type'] == 'datainstance'])
+    print(f"\n✅ Person to DataInstance ratio: {person_count} persons, {datainstance_count} datainstances")
+    if datainstance_count >= person_count:
+        print("✅ Sufficient datainstance nodes to ensure every person has at least 1 datainstance edge")
+    else:
+        print("⚠️  Warning: Not enough datainstance nodes for all persons")
 
    
