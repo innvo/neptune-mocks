@@ -3,7 +3,7 @@
 | # | Edge | Relationship Class | GDS-I Release | Mock |
 | --- | --- | --- | --- | --- |
 | 1. | address\_datainstance | Secondary | 1.2 |   |
-| 2. | building\_address | Primary | 1.0 MVP |   |
+| 2. | building\_address | Primary | 1.0 MVP | Done |
 | 3. | encounter\_fingerprintidentificationnumber | Secondary | 1.2 |   |
 | 4. | encounter\_receipt | Secondary | 1.2 |   |
 | 5. | form\_address\_instance | Secondary | 1.1 |   |
@@ -15,9 +15,9 @@
 | 11. | organization\_organization | Primary | 1.1 |   |
 | 12. | organization\_phone | Primary | 1.1 |   |
 | 13. | organization\_receipt | Primary | 1.1 |   |
-| 14. | person\_address | Primary | 1.0 MVP |   |
+| 14. | person\_address | Primary | 1.0 MVP | Done |
 | 15. | person\_address\_form | Secondary | 1.1 |   |
-| 16. | person\_anumber | Primary | 1.0 MVP |   |
+| 16. | person\_anumber | Primary | 1.0 MVP | WIP |
 | 17. | person\_datainstance | Primary | 1.0 MVP |   |
 | 18. | person\_email | Primary | 1.0 MVP |   |
 | 19. | person\_fingerprintidentificationnumber | Secondary | TBD |   |
