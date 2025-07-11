@@ -114,19 +114,19 @@ def main():
         "src/generate/mock/edges/maximum_performance_edge_generator.py"
     ]
     
-    # Other edge scripts (non-person edges)
+    # Other edge scripts (using streaming versions for large datasets)
     other_edge_scripts = [
         "src/generate/mock/edges/generate_mock_building-address_edge.py",
         "src/generate/mock/edges/generate_mock_organization-address_edge.py",
-        "src/generate/mock/edges/generate_mock_person-address_edge.py",
-        "src/generate/mock/edges/generate_mock_person-anumber_edge.py",
+        "src/generate/mock/edges/generate_mock_person-address_edge_streaming.py",
+        "src/generate/mock/edges/generate_mock_person-anumber_edge_streaming.py",
         "src/generate/mock/edges/generate_mock_person-datainstance_edge.py",
-        "src/generate/mock/edges/generate_mock_person-email_edge.py",
-        "src/generate/mock/edges/generate_mock_person-form_edge.py",
+        "src/generate/mock/edges/generate_mock_person-email_edge_streaming.py",
+        "src/generate/mock/edges/generate_mock_person-form_edge_streaming.py",
         "src/generate/mock/edges/generate_mock_person-name_edge.py",
         "src/generate/mock/edges/generate_mock_person-organization_edge.py",
-        "src/generate/mock/edges/generate_mock_person-phone_edge.py",
-        "src/generate/mock/edges/generate_mock_person-receipt_edge.py",
+        "src/generate/mock/edges/generate_mock_person-phone_edge_streaming.py",
+        "src/generate/mock/edges/generate_mock_person-receipt_edge_streaming.py",
         "src/generate/mock/edges/generate_mock_organization-organization_edge.py"
     ]
 
