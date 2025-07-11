@@ -1,16 +1,16 @@
 # Node Relationship Classification
 
-| node | Relationship Class | GDS-I Release | Mock |
+| node | Node  Class | GDS-I Release | Mock |
 | --- | --- | --- | --- |
-| address | Secondary | 1.2 |   |
-| building | Primary | 1.0 MVP | Done |
+| address | primary | 1.0 MVP | WIP |
+| building | Primary | 1.0 | WIP |
 | datainstance | Secondary | 1.0 | WIP |
-| email | Secondary | 1.2 | WIP |
+| email | Secondary | 1.0 | WIP |
 | encounter | Secondary | 1.2 |   |
-| form | Secondary | 1.1 |   |
+| form | Secondary | 1.0 |   |
 | iperson | Secondary | 1.2 |   |
-| name | Primary | 1.0 |   |
-| onlineaccount | Primary | 1.1 | Done |
+| name | Primary | 1.0 | WIP |
+| onlineaccount | Primary | 1.0 |   |
 | organization |   |   |   |
 | person | Primary |   |   |
 | phone |   |   |   |

@@ -22,7 +22,7 @@ def generate_node_data():
     
     # Calculate remaining nodes for other types
     remaining_nodes = NUM_NODE_RECORDS - target_person_count - target_datainstance_count
-    other_types = ['address', 'anumber', 'email', 'form', 'organization', 'receipt']
+    other_types = ['address', 'anumber', 'email', 'form', 'organization','phone', 'receipt']
     
     # Distribute remaining nodes among other types
     nodes_per_other_type = remaining_nodes // len(other_types)
