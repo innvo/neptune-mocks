@@ -1,21 +1,25 @@
-# Node Relationship Classification
+## Node Relationship Classification
 
 | node | Node  Class | GDS-I Release | Mock |
 | --- | --- | --- | --- |
 | address | primary | 1.0 MVP | WIP |
-| building | Primary | 1.0 | WIP |
-| datainstance | Secondary | 1.0 | WIP |
-| email | Secondary | 1.0 | WIP |
-| encounter | Secondary | 1.2 |   |
-| form | Secondary | 1.0 |   |
-| iperson | Secondary | 1.2 |   |
-| name | Primary | 1.0 | WIP |
-| onlineaccount | Primary | 1.0 |   |
-| organization |   |   |   |
-| person | Primary |   |   |
-| phone |   |   |   |
-| receipt | Primary | 1.1 |   |
-| socialsecuritynumber | Secondary | TBD |   |
+| anumber | primary | 1.0 | WIP |
+| building | primary | 1.0 | WIP |
+| datainstance | secondary | 1.0 | WIP |
+| email | secondary | 1.0 | WIP |
+| encounter | secondary | 1.2 |   |
+| fingerprintidentificationnumber | secondary | TBD |   |
+| form | primary | 1.0 | WIP |
+| iperson | secondary | 1.2 |   |
+| name | secondary | 1.0 | WIP |
+| onlineaccount | secondary | 1.0 | \- |
+| organization | primary | 1.0 |   |
+| person | primary | 1,0 | WIP |
+| phone | secondary | 1.0 | WIP |
+| receipt | secondary | 1.1 |   |
+| socialsecuritynumber | secondary | TBD |   |
+
+## Edge Classification
 
 | # | Edge | Relationship Class | GDS-I Release | Mock |
 | --- | --- | --- | --- | --- |
