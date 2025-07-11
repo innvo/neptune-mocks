@@ -9,12 +9,12 @@ import multiprocessing as mp
 import time
 
 # Configuration - optimized for performance and reliability
-NUM_NODE_RECORDS = 20000
+NUM_NODE_RECORDS = 1000000
 # Dynamic batch sizing based on system capabilities
 OPTIMAL_BATCH_SIZE = min(10000, max(1000, NUM_NODE_RECORDS // mp.cpu_count()))
 NUM_NODE_RECORDS_PER_BATCH = OPTIMAL_BATCH_SIZE
 # Node types optimized for referential integrity
-NODE_TYPES = ['person', 'address','anumber','datainstance','email','form','organization','receipt']
+NODE_TYPES = ['person', 'address','anumber','datainstance','email','form','name','organization','receipt']
 
 # Ensure the data/input directory exists
 os.makedirs('src/data/input', exist_ok=True)
@@ -61,7 +61,7 @@ def generate_node_data():
     
     # Calculate remaining nodes for other types
     remaining_nodes = NUM_NODE_RECORDS - target_person_count - target_datainstance_count
-    other_types = ['address', 'anumber', 'email', 'form', 'onlineaccount','organization','phone', 'receipt']
+    other_types = ['address', 'anumber', 'email', 'form', 'name', 'onlineaccount','organization','phone', 'receipt']
     
     # Efficient distribution calculation
     nodes_per_other_type = remaining_nodes // len(other_types)

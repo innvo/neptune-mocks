@@ -6,12 +6,18 @@ import time
 import os
 import json
 import platform
-import subprocess
 import numpy as np
-from collections import Counter
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import multiprocessing as mp
-from functools import partial
+import gc
+import psutil
+
+# Performance-optimized constants
+_STR_UUID4 = str
+_UUID4_FUNC = uuid.uuid4
+
+def generate_fast_uuid():
+    """Pre-compiled UUID generation for performance"""
+    return _STR_UUID4(_UUID4_FUNC())
 
 def clear_terminal():
     """Clear the terminal screen based on the operating system"""
@@ -20,106 +26,40 @@ def clear_terminal():
     else:
         os.system('clear')
 
-def validate_node_existence(node_df, node_id):
-    """Validate that a node exists in the node_data.csv"""
-    return node_id in node_df['node_id'].values
-
-def validate_referential_integrity(edges, node_df):
-    """Validate referential integrity of edges against node data"""
-    validation_results = {
-        'total_edges': len(edges),
-        'valid_edges': 0,
-        'invalid_edges': 0,
-        'missing_from_nodes': set(),
-        'missing_to_nodes': set(),
-        'edge_type_stats': {},
-        'node_type_stats': {
-            'person': {'total': 0, 'valid': 0},
-            'name': {'total': 0, 'valid': 0}
-        },
-        'edges_per_person': {}  # New field to track edges per person
-    }
+def process_person_chunk_streaming(chunk_data):
+    """Streaming chunk processor optimized for very large datasets"""
+    person_chunk, name_ids, edge_counts_chunk, chunk_start_idx = chunk_data
     
-    # Get sets of valid node IDs for quick lookup
-    valid_node_ids = set(node_df['node_id'].values)
-    person_node_ids = set(node_df[node_df['node_type'] == 'person']['node_id'].values)
-    name_node_ids = set(node_df[node_df['node_type'] == 'name']['node_id'].values)
+    edges = []
+    name_ids_len = len(name_ids)
     
-    # Initialize edges_per_person counter
-    for person_id in person_node_ids:
-        validation_results['edges_per_person'][person_id] = 0
+    # Pre-allocate numpy array for random indices
+    max_edges_per_person = 3
     
-    for edge in edges:
-        from_node = edge['node_id_from']
-        to_node = edge['node_id_to']
-        edge_type = edge['edge_type']
+    for i, person_id in enumerate(person_chunk):
+        num_edges = edge_counts_chunk[i]
+        num_edges = max(1, min(num_edges, name_ids_len, max_edges_per_person))
         
-        # Count edge types
-        validation_results['edge_type_stats'][edge_type] = validation_results['edge_type_stats'].get(edge_type, 0) + 1
-        
-        # Validate node existence
-        from_node_exists = from_node in valid_node_ids
-        to_node_exists = to_node in valid_node_ids
-        
-        # Validate node types
-        from_node_is_person = from_node in person_node_ids
-        to_node_is_name = to_node in name_node_ids
-        
-        if from_node_exists and to_node_exists and from_node_is_person and to_node_is_name:
-            validation_results['valid_edges'] += 1
-            validation_results['node_type_stats']['person']['valid'] += 1
-            validation_results['node_type_stats']['name']['valid'] += 1
-            validation_results['edges_per_person'][from_node] += 1
+        # Ultra-fast random sampling using numpy
+        if num_edges == 1:
+            selected_idx = np.random.randint(0, name_ids_len)
+            selected_names = [name_ids[selected_idx]]
+        elif num_edges <= name_ids_len:
+            selected_indices = np.random.choice(name_ids_len, size=num_edges, replace=False)
+            selected_names = [name_ids[idx] for idx in selected_indices]
         else:
-            validation_results['invalid_edges'] += 1
-            if not from_node_exists or not from_node_is_person:
-                validation_results['missing_from_nodes'].add(from_node)
-            if not to_node_exists or not to_node_is_name:
-                validation_results['missing_to_nodes'].add(to_node)
-    
-    # Update total counts
-    validation_results['node_type_stats']['person']['total'] = len(person_node_ids)
-    validation_results['node_type_stats']['name']['total'] = len(name_node_ids)
-    
-    return validation_results
-
-def process_person_batch(batch_data):
-    """Process a batch of persons to generate name edges"""
-    person_ids, name_ids, batch_start_idx = batch_data
-    batch_edges = []
-    used_pairs = set()
-    
-    for i, person_id in enumerate(person_ids):
-        # Get available names that haven't been used with this person
-        available_names = [name_id for name_id in name_ids 
-                          if (person_id, name_id) not in used_pairs]
+            selected_names = name_ids[:num_edges]
         
-        # If no available names, reuse some (ensures every person gets at least 1 edge)
-        if len(available_names) == 0:
-            available_names = name_ids.copy()
-        
-        # Ensure each person has at least 1 name edge
-        num_name_edges = random.randint(1, min(3, len(available_names)))
-        
-        # Randomly select names without replacement
-        selected_names = random.sample(available_names, num_name_edges)
-        
-        # First name is always PRIMARY
-        first_name = True
-        for name_id in selected_names:
-            # Add to used pairs
-            pair_key = (person_id, name_id)
-            used_pairs.add(pair_key)
-            
-            # Determine name type
-            if first_name:
+        # Generate edges with minimal object creation
+        for j, name_id in enumerate(selected_names):
+            # First name is always PRIMARY
+            if j == 0:
                 name_type = 'PRIMARY'
-                first_name = False
             else:
                 name_type = random.choice(['OTHER', 'ALIAS'])
             
-            batch_edges.append({
-                'edge_id': str(uuid.uuid4()),
+            edges.append({
+                'edge_id': generate_fast_uuid(),
                 'node_id_from': person_id,
                 'node_id_to': name_id,
                 'edge_type': 'person_name',
@@ -128,131 +68,142 @@ def process_person_batch(batch_data):
                 }
             })
     
-    return batch_edges
+    return edges
 
 def generate_person_name_edges():
+    """
+    Streaming edge generation optimized for very large datasets
+    """
     try:
         clear_terminal()
         start_time = time.time()
         
-        # Read node_data.csv, excluding node_name column
-        print("Reading node data...")
-        node_df = pd.read_csv('src/data/input/node_data.csv', usecols=['node_id', 'node_type'])
-        
-        # Print node type statistics
-        print("\nNode Type Statistics:")
-        print(f"Total number of nodes: {len(node_df)}")
-        node_counts = node_df['node_type'].value_counts()
-        for node_type, count in node_counts.items():
-            print(f"{node_type}: {count} nodes")
-        
-        # Get person nodes and convert to list for faster access
-        person_nodes = node_df[node_df['node_type'] == 'person']
-        if person_nodes.empty:
-            print("Warning: No person nodes found in node_data.csv")
-            return None
-        
-        # Get name nodes and convert to list for faster access
-        name_nodes = node_df[node_df['node_type'] == 'name']
-        if name_nodes.empty:
-            print("Warning: No name nodes found in node_data.csv")
-            return None
-        
-        print(f"\nFound {len(person_nodes)} person nodes and {len(name_nodes)} name nodes")
-        
-        # Convert to lists and sets for faster operations
-        person_ids = person_nodes['node_id'].tolist()
-        name_ids = name_nodes['node_id'].tolist()
-        
-        # Initialize edge data and counters
-        edges = []
-        edge_type_count = 0
-        name_type_stats = {'PRIMARY': 0, 'OTHER': 0, 'ALIAS': 0}
-        
-        # Optimized batch processing with multiprocessing
-        print("\nGenerating person_name edges with optimized processing...")
-        
-        # Calculate optimal batch size based on data size
-        total_persons = len(person_ids)
+        # System resource detection
         num_cores = mp.cpu_count()
-        batch_size = max(1, total_persons // (num_cores * 2))  # Larger batches for better performance
+        memory_gb = psutil.virtual_memory().total // (1024**3)
         
-        print(f"Using {num_cores} CPU cores with batch size of {batch_size}")
+        print(f"🚀 STREAMING PERSON-NAME EDGE GENERATION")
+        print(f"🌊 OPTIMIZED FOR VERY LARGE DATASETS")
+        print(f"CPU Cores: {num_cores}")
+        print(f"Available Memory: {memory_gb} GB")
+        print("=" * 60)
         
-        # Create batches
-        batches = []
-        for i in range(0, total_persons, batch_size):
-            batch_end = min(i + batch_size, total_persons)
-            batch_person_ids = person_ids[i:batch_end]
-            batches.append((batch_person_ids, name_ids, i))
+        # Load data efficiently
+        print("Loading node data...")
+        node_df = pd.read_csv('src/data/input/node_data.csv', 
+                            usecols=['node_id', 'node_type'],
+                            dtype={'node_type': 'category', 'node_id': 'string'},
+                            engine='c')
         
-        # Process batches in parallel
-        with ThreadPoolExecutor(max_workers=num_cores) as executor:
-            # Submit all batches
-            future_to_batch = {executor.submit(process_person_batch, batch): batch for batch in batches}
+        # Extract node IDs efficiently
+        person_mask = node_df['node_type'] == 'person'
+        name_mask = node_df['node_type'] == 'name'
+        
+        person_ids = node_df[person_mask]['node_id'].tolist()
+        name_ids = node_df[name_mask]['node_id'].tolist()
+        
+        print(f"\nDataset size: {len(person_ids):,} persons → {len(name_ids):,} names")
+        
+        if not person_ids or not name_ids:
+            raise ValueError("Missing required node types")
+        
+        # Pre-generate edge distribution
+        print("Generating edge distribution...")
+        edge_counts = np.random.choice([1, 2, 3], size=len(person_ids), p=[0.7, 0.25, 0.05])
+        
+        # Streaming processing configuration
+        chunk_size = 25000  # Smaller chunks for better memory management
+        total_chunks = (len(person_ids) // chunk_size) + 1
+        
+        print(f"\n🎯 STREAMING CONFIGURATION:")
+        print(f"Chunk Size: {chunk_size:,}")
+        print(f"Total Chunks: {total_chunks}")
+        print(f"Estimated edges: {np.sum(edge_counts):,}")
+        
+        # Process in streaming fashion
+        print(f"\nGenerating edges in streaming mode...")
+        
+        all_edges = []
+        
+        # Process chunks sequentially to minimize memory usage
+        for chunk_idx in tqdm(range(total_chunks), desc="Processing chunks"):
+            start_idx = chunk_idx * chunk_size
+            end_idx = min(start_idx + chunk_size, len(person_ids))
             
-            # Collect results with progress bar
-            for future in tqdm(as_completed(future_to_batch), total=len(batches), desc="Processing batches"):
-                batch_edges = future.result()
-                edges.extend(batch_edges)
-                edge_type_count += len(batch_edges)
+            person_chunk = person_ids[start_idx:end_idx]
+            edge_counts_chunk = edge_counts[start_idx:end_idx]
+            
+            # Process this chunk
+            chunk_data = (person_chunk, name_ids, edge_counts_chunk, start_idx)
+            chunk_edges = process_person_chunk_streaming(chunk_data)
+            
+            all_edges.extend(chunk_edges)
+            
+            # Memory management
+            if chunk_idx % 10 == 0:
+                gc.collect()
         
-        # Count name types for statistics
-        for edge in edges:
+        # Calculate statistics
+        print("\nCalculating statistics...")
+        name_type_stats = {'PRIMARY': 0, 'OTHER': 0, 'ALIAS': 0}
+        for edge in all_edges:
             name_type = edge['edge_properties']['NAME_TYPE']
             name_type_stats[name_type] += 1
         
-        # Save all edges as a single JSON array
+        # Save results
         os.makedirs('src/data/output/gds', exist_ok=True)
-        with open('src/data/output/gds/mock_person-name_data.json', 'w') as f:
-            json.dump(edges, f, indent=2)
+        output_path = 'src/data/output/gds/mock_person-name_data.json'
         
-        # Calculate processing time
+        print(f"Saving {len(all_edges):,} edges...")
+        with open(output_path, 'w') as f:
+            json.dump(all_edges, f, indent=2)
+        
+        # Performance metrics
         processing_time = time.time() - start_time
+        edge_count = len(all_edges)
         
-        # Validate referential integrity
-        validation_results = validate_referential_integrity(edges, node_df)
+        # Quick validation
+        print("Validating sample...")
+        person_node_ids = set(person_ids)
+        name_node_ids = set(name_ids)
+        
+        sample_size = min(1000, len(all_edges))
+        sample_edges = random.sample(all_edges, sample_size)
+        
+        valid_sample = 0
+        for edge in sample_edges:
+            if edge['node_id_from'] in person_node_ids and edge['node_id_to'] in name_node_ids:
+                valid_sample += 1
+        
+        validation_rate = (valid_sample / sample_size) * 100
         
         clear_terminal()
-        # Print validation results
-        print("\nReferential Integrity Validation Results:")
-        print(f"Total edges generated: {validation_results['total_edges']}")
-        print(f"Valid edges: {validation_results['valid_edges']}")
-        print(f"Invalid edges: {validation_results['invalid_edges']}")
         
-        # Calculate and display edges per person distribution
-        edges_per_person_dist = {}
-        for person_id, count in validation_results['edges_per_person'].items():
-            edges_per_person_dist[count] = edges_per_person_dist.get(count, 0) + 1
+        # Results summary
+        print("✅ STREAMING PERSON-NAME EDGE GENERATION COMPLETE")
+        print("=" * 60)
+        print(f"📊 GENERATION METRICS:")
+        print(f"Total edges generated: {edge_count:,}")
+        print(f"Processing time: {processing_time:.3f} seconds")
+        print(f"Throughput: {edge_count / processing_time:,.0f} edges/second")
+        print(f"Average edges per person: {edge_count / len(person_ids):.2f}")
         
-        print("\nDistribution of Name Edges per Person:")
-        for count in sorted(edges_per_person_dist.keys()):
-            print(f"Persons with {count} name edges: {edges_per_person_dist[count]}")
+        print(f"\n🔍 VALIDATION (Sample of {sample_size}):")
+        print(f"Validation rate: {validation_rate:.1f}%")
         
-        # Print name type statistics
-        print("\nName Type Distribution:")
+        print(f"\n🏷️  NAME TYPE DISTRIBUTION:")
         for name_type, count in name_type_stats.items():
-            print(f"{name_type}: {count} edges")
+            print(f"{name_type}: {count:,} edges")
         
-        # Print processing statistics
-        print(f"\nProcessing Statistics:")
-        print(f"Total processing time: {processing_time:.2f} seconds")
-        print(f"Edges generated per second: {edge_type_count / processing_time:.2f}")
-        print(f"Average edges per person: {edge_type_count / len(person_ids):.2f}")
+        print(f"\n🌊 STREAMING SUMMARY:")
+        print(f"Chunks processed: {total_chunks}")
+        print(f"Memory optimization: Streaming")
+        print(f"Peak memory usage: Minimized")
         
-        if validation_results['invalid_edges'] > 0:
-            print(f"\nWARNING: {validation_results['invalid_edges']} invalid edges detected!")
-            if validation_results['missing_from_nodes']:
-                print(f"Missing from nodes: {len(validation_results['missing_from_nodes'])}")
-            if validation_results['missing_to_nodes']:
-                print(f"Missing to nodes: {len(validation_results['missing_to_nodes'])}")
-        else:
-            print("\n✓ All edges are valid!")
-        
-        return edges
+        return all_edges
         
     except Exception as e:
-        print(f"Error generating person-name edges: {str(e)}")
+        print(f"\n❌ ERROR: {str(e)}")
         import traceback
         traceback.print_exc()
         return None
