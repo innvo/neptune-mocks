@@ -9,7 +9,7 @@ import multiprocessing as mp
 import time
 
 # Configuration - optimized for performance and reliability
-NUM_NODE_RECORDS = 1000000
+NUM_NODE_RECORDS = 10000
 # Dynamic batch sizing based on system capabilities
 OPTIMAL_BATCH_SIZE = min(10000, max(1000, NUM_NODE_RECORDS // mp.cpu_count()))
 NUM_NODE_RECORDS_PER_BATCH = OPTIMAL_BATCH_SIZE
