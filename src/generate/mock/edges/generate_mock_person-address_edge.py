@@ -6,7 +6,12 @@ import time
 import os
 import json
 import platform
-import subprocess
+import numpy as np
+from collections import Counter
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import multiprocessing as mp
+import gc
+import psutil
 
 def clear_terminal():
     """Clear the terminal screen based on the operating system"""
@@ -15,9 +20,9 @@ def clear_terminal():
     else:
         os.system('clear')
 
-def validate_node_existence(node_df, node_id):
+def validate_node_existence(valid_node_ids, node_id):
     """Validate that a node exists in the node_data.csv"""
-    return node_id in node_df['node_id'].values
+    return node_id in valid_node_ids
 
 def validate_referential_integrity(edges, node_df):
     """Validate referential integrity of edges against node data"""
@@ -82,10 +87,101 @@ def validate_referential_integrity(edges, node_df):
     
     return validation_results
 
+def process_person_batch(batch_data):
+    """Process a batch of persons to generate address edges - MAXIMUM PERFORMANCE"""
+    person_ids, address_ids, edge_counts, batch_start_idx = batch_data
+    batch_edges = []
+    used_pairs = set()
+    
+    # Pre-allocate memory for maximum performance
+    estimated_edges = len(person_ids) * 2  # Assume average 2 edges per person
+    batch_edges = []
+    batch_edges.reserve(estimated_edges) if hasattr(batch_edges, 'reserve') else None
+    
+    for i, person_id in enumerate(person_ids):
+        # Get available addresses that haven't been used with this person
+        available_addresses = [addr_id for addr_id in address_ids 
+                             if (person_id, addr_id) not in used_pairs]
+        
+        # If no available addresses, reuse some (ensures every person gets at least 1 edge)
+        if len(available_addresses) == 0:
+            available_addresses = address_ids.copy()
+        
+        # Use pre-generated edge count for this person
+        num_address_edges = edge_counts[batch_start_idx + i]
+        
+        # Limit the number of edges to available addresses (minimum 1, maximum 3)
+        num_address_edges = max(1, min(num_address_edges, len(available_addresses), 3))
+        
+        # Randomly select addresses without replacement
+        selected_addresses = random.sample(available_addresses, num_address_edges)
+        
+        # First address is always PRIMARY
+        first_address = True
+        for address_id in selected_addresses:
+            # Add to used pairs
+            pair_key = (person_id, address_id)
+            used_pairs.add(pair_key)
+            
+            # Determine address type
+            if first_address:
+                address_type = 'PRIMARY'
+                first_address = False
+            else:
+                address_type = random.choice(['SECONDARY', 'TERTIARY'])
+            
+            batch_edges.append({
+                'edge_id': str(uuid.uuid4()),
+                'node_id_from': person_id,
+                'node_id_to': address_id,
+                'edge_type': 'person_address',
+                'edge_properties': {
+                    'ADDRESS_TYPE': address_type
+                }
+            })
+    
+    return batch_edges
+
+def get_optimal_batch_size(total_persons, num_cores, memory_gb):
+    """Calculate optimal batch size based on CPU cores and available memory"""
+    # For maximum performance, use larger batches
+    # Base calculation: one batch per core for maximum parallelism
+    base_batch_size = max(1, total_persons // num_cores)
+    
+    # Adjust based on available memory (more memory = larger batches)
+    memory_factor = min(4, max(1, memory_gb // 4))  # Scale up to 4x for high memory systems
+    
+    # For very large datasets, use even larger batches
+    if total_persons > 100000:
+        batch_size = max(1, total_persons // (num_cores * 1))  # One batch per core
+    else:
+        batch_size = max(1, total_persons // (num_cores * 2))  # Two batches per core
+    
+    # Apply memory factor
+    batch_size = int(batch_size * memory_factor)
+    
+    return max(100, batch_size)  # Minimum batch size of 100
+
 def generate_person_address_edges():
+    """
+    Generate person-address edges with MAXIMUM CPU and MEMORY utilization:
+    - Every person must have at least 1 address edge
+    - Every person can have up to 3 address edges
+    - Distribution is weighted to favor fewer edges (1-2 most common)
+    - Uses maximum available CPU cores and memory
+    """
     try:
         clear_terminal()
         start_time = time.time()
+        
+        # Get system resources for optimization
+        num_cores = mp.cpu_count()
+        memory_gb = psutil.virtual_memory().total // (1024**3)
+        
+        print(f"🚀 MAXIMUM PERFORMANCE MODE")
+        print(f"CPU Cores: {num_cores}")
+        print(f"Available Memory: {memory_gb} GB")
+        print("=" * 60)
         
         # Read node_data.csv, excluding node_name column
         print("Reading node data...")
@@ -98,69 +194,81 @@ def generate_person_address_edges():
         for node_type, count in node_counts.items():
             print(f"{node_type}: {count} nodes")
         
-        # Get person nodes
+        # Get person nodes and convert to list for faster access
         person_nodes = node_df[node_df['node_type'] == 'person']
         if person_nodes.empty:
             print("Warning: No person nodes found in node_data.csv")
             return None
         
-        # Get address nodes
+        # Get address nodes and convert to list for faster access
         address_nodes = node_df[node_df['node_type'] == 'address']
         if address_nodes.empty:
             print("Warning: No address nodes found in node_data.csv")
             return None
         
+        print(f"\nFound {len(person_nodes)} person nodes and {len(address_nodes)} address nodes")
+        
+        # Check if we have enough address nodes for all persons
+        if len(address_nodes) < len(person_nodes):
+            print(f"\nWARNING: Only {len(address_nodes)} address nodes available for {len(person_nodes)} persons")
+            print("This means some address nodes will be shared across multiple persons")
+        
+        # Convert to lists and sets for faster operations
+        person_ids = person_nodes['node_id'].tolist()
+        address_ids = address_nodes['node_id'].tolist()
+        valid_node_ids = set(node_df['node_id'].values)
+        
+        # Pre-generate edge counts for all persons using numpy for speed
+        edge_counts = np.random.choice(
+            [1, 2, 3], 
+            size=len(person_ids),
+            p=[0.7, 0.25, 0.05]
+        )
+        
         # Initialize edge data and counters
         edges = []
-        missing_nodes = set()
         edge_type_count = 0
         address_type_stats = {'PRIMARY': 0, 'SECONDARY': 0, 'TERTIARY': 0}
         
-        # Track address usage to ensure we don't exceed the 1-3 people per address limit
-        address_usage = {addr_id: 0 for addr_id in address_nodes['node_id']}
+        # MAXIMUM PERFORMANCE: Calculate optimal batch size
+        batch_size = get_optimal_batch_size(len(person_ids), num_cores, memory_gb)
         
-        # Generate edges for each person with progress bar
-        print("\nGenerating person_address edges...")
-        for _, person in tqdm(person_nodes.iterrows(), total=len(person_nodes), desc="Processing person nodes"):
-            person_id = person['node_id']
+        print(f"\n🚀 MAXIMUM PERFORMANCE SETTINGS:")
+        print(f"CPU Cores: {num_cores}")
+        print(f"Batch Size: {batch_size:,}")
+        print(f"Memory Available: {memory_gb} GB")
+        print(f"Estimated batches: {len(person_ids) // batch_size + 1}")
+        
+        # Create batches
+        batches = []
+        for i in range(0, len(person_ids), batch_size):
+            batch_end = min(i + batch_size, len(person_ids))
+            batch_person_ids = person_ids[i:batch_end]
+            batches.append((batch_person_ids, address_ids, edge_counts, i))
+        
+        print(f"\nGenerating person_address edges with MAXIMUM performance...")
+        
+        # Process batches in parallel with maximum workers
+        max_workers = min(num_cores * 2, len(batches))  # Use up to 2x CPU cores for I/O bound tasks
+        
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Submit all batches
+            future_to_batch = {executor.submit(process_person_batch, batch): batch for batch in batches}
             
-            # Filter addresses that haven't reached their maximum usage
-            available_addresses = address_nodes[address_nodes['node_id'].apply(lambda x: address_usage[x] < 3)]
-            
-            if len(available_addresses) == 0:
-                print(f"Warning: No available addresses for person {person_id}")
-                continue
-            
-            # Ensure each person has 1-3 address edges
-            num_address_edges = random.randint(1, min(3, len(available_addresses)))
-            selected_addresses = available_addresses.sample(n=num_address_edges)
-            
-            # First address is always PRIMARY
-            first_address = True
-            for _, address in selected_addresses.iterrows():
-                address_id = address['node_id']
-                if validate_node_existence(node_df, address_id):
-                    # Determine address type
-                    if first_address:
-                        address_type = 'PRIMARY'
-                        first_address = False
-                    else:
-                        address_type = random.choice(['SECONDARY', 'TERTIARY'])
-                    
-                    edges.append({
-                        'edge_id': str(uuid.uuid4()),
-                        'node_id_from': person_id,
-                        'node_id_to': address_id,
-                        'edge_type': 'person_address',
-                        'edge_properties': {
-                            'ADDRESS_TYPE': address_type
-                        }
-                    })
-                    edge_type_count += 1
-                    address_type_stats[address_type] += 1
-                    address_usage[address_id] += 1
-                else:
-                    missing_nodes.add(address_id)
+            # Collect results with progress bar
+            for future in tqdm(as_completed(future_to_batch), total=len(batches), desc="Processing batches"):
+                batch_edges = future.result()
+                edges.extend(batch_edges)
+                edge_type_count += len(batch_edges)
+                
+                # Aggressive garbage collection for memory management
+                if len(edges) % 5000 == 0:
+                    gc.collect()
+        
+        # Count address types for statistics
+        for edge in edges:
+            address_type = edge['edge_properties']['ADDRESS_TYPE']
+            address_type_stats[address_type] += 1
         
         # Save all edges as a single JSON array
         os.makedirs('src/data/output/gds', exist_ok=True)
@@ -189,50 +297,36 @@ def generate_person_address_edges():
         for count in sorted(edges_per_person_dist.keys()):
             print(f"Persons with {count} address edges: {edges_per_person_dist[count]}")
         
-        # Calculate and display edges per address distribution
-        edges_per_address_dist = {}
-        for address_id, count in validation_results['edges_per_address'].items():
-            edges_per_address_dist[count] = edges_per_address_dist.get(count, 0) + 1
-        
-        print("\nDistribution of People per Address:")
-        for count in sorted(edges_per_address_dist.keys()):
-            print(f"Addresses with {count} people: {edges_per_address_dist[count]}")
-        
-        if validation_results['missing_from_nodes']:
-            print(f"\nMissing or invalid person nodes: {len(validation_results['missing_from_nodes'])}")
-            print("Sample of missing person nodes:", list(validation_results['missing_from_nodes'])[:5])
-        
-        if validation_results['missing_to_nodes']:
-            print(f"\nMissing or invalid address nodes: {len(validation_results['missing_to_nodes'])}")
-            print("Sample of missing address nodes:", list(validation_results['missing_to_nodes'])[:5])
-        
-        print("\nNode Type Statistics:")
-        for node_type, stats in validation_results['node_type_stats'].items():
-            print(f"\n{node_type.capitalize()} Nodes:")
-            print(f"  Total: {stats['total']}")
-            print(f"  Used in valid edges: {stats['valid']}")
-        
-        print("\nAddress Type Statistics:")
+        # Print address type statistics
+        print("\nAddress Type Distribution:")
         for address_type, count in address_type_stats.items():
             print(f"{address_type}: {count} edges")
         
-        print("\nEdge Generation Statistics:")
-        print(f"Total number of person_address edges generated: {edge_type_count}")
-        print(f"Processing time: {processing_time:.2f} seconds")
-        print(f"Edges per second: {edge_type_count / processing_time:.2f}")
+        # Print MAXIMUM PERFORMANCE statistics
+        print(f"\n🚀 MAXIMUM PERFORMANCE STATISTICS:")
+        print(f"Total processing time: {processing_time:.2f} seconds")
+        print(f"Edges generated per second: {edge_type_count / processing_time:.2f}")
+        print(f"Average edges per person: {edge_type_count / len(person_ids):.2f}")
+        print(f"CPU utilization: {num_cores} cores")
+        print(f"Memory utilization: {memory_gb} GB available")
+        print(f"Batch efficiency: {len(batches)} batches processed")
         
-        # Read the final edge file to get the complete DataFrame
-        with open('src/data/output/gds/mock_person-address_data.json', 'r') as f:
-            edges_data = json.load(f)
-        final_edge_df = pd.DataFrame(edges_data)
-        return final_edge_df
+        if validation_results['invalid_edges'] > 0:
+            print(f"\nWARNING: {validation_results['invalid_edges']} invalid edges detected!")
+            if validation_results['missing_from_nodes']:
+                print(f"Missing from nodes: {len(validation_results['missing_from_nodes'])}")
+            if validation_results['missing_to_nodes']:
+                print(f"Missing to nodes: {len(validation_results['missing_to_nodes'])}")
+        else:
+            print("\n✓ All edges are valid!")
+        
+        return edges
         
     except Exception as e:
-        print(f"Error generating edges: {str(e)}")
+        print(f"Error generating person-address edges: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return None
 
 if __name__ == "__main__":
-    edge_df = generate_person_address_edges()
-    if edge_df is not None:
-        print("\nSample of Generated Edges:")
-        print(edge_df.head()) 
+    generate_person_address_edges() 

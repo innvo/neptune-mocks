@@ -7,6 +7,11 @@ import os
 import json
 import platform
 import subprocess
+import numpy as np
+from collections import Counter
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import multiprocessing as mp
+from functools import partial
 
 def clear_terminal():
     """Clear the terminal screen based on the operating system"""
@@ -82,6 +87,55 @@ def validate_referential_integrity(edges, node_df):
     
     return validation_results
 
+def process_person_batch(batch_data):
+    """Process a batch of persons to generate organization edges"""
+    person_ids, organization_ids, batch_start_idx = batch_data
+    batch_edges = []
+    used_pairs = set()
+    
+    # Configuration for edge generation
+    person_has_org_probability = 0.7  # 70% of persons will have organization edges
+    max_orgs_per_person = 3
+    
+    for i, person_id in enumerate(person_ids):
+        # Determine if this person will have organization edges
+        if random.random() < person_has_org_probability:
+            # Get available organizations that haven't been used with this person
+            available_organizations = [org_id for org_id in organization_ids 
+                                     if (person_id, org_id) not in used_pairs]
+            
+            # If no available organizations, reuse some
+            if len(available_organizations) == 0:
+                available_organizations = organization_ids.copy()
+            
+            # Random number of organizations (1 to max_orgs_per_person)
+            num_org_edges = random.randint(1, min(max_orgs_per_person, len(available_organizations)))
+            
+            # Randomly select organizations without replacement
+            selected_organizations = random.sample(available_organizations, num_org_edges)
+            
+            for org_id in selected_organizations:
+                # Add to used pairs
+                pair_key = (person_id, org_id)
+                used_pairs.add(pair_key)
+                
+                batch_edges.append({
+                    'edge_id': str(uuid.uuid4()),
+                    'node_id_from': person_id,
+                    'node_id_to': org_id,
+                    'edge_type': 'person_organization',
+                    'edge_name': 'workAt',
+                    'edge_properties': {
+                        'ORG_TYPE': 'EMPLOYER',
+                        'ADDR_FROM_DATE': f"{random.randint(2010, 2024)}-{random.randint(1, 12):02d}-{random.randint(1, 28):02d}",
+                        'ADDR_THRU_DATE': f"{random.randint(2010, 2024)}-{random.randint(1, 12):02d}-{random.randint(1, 28):02d}",
+                        'EMPLOYMENT_START_DATE': f"{random.randint(2010, 2024)}-{random.randint(1, 12):02d}-{random.randint(1, 28):02d}",
+                        'EMPLOYMENT_END_DATE': f"{random.randint(2010, 2024)}-{random.randint(1, 12):02d}-{random.randint(1, 28):02d}"
+                    }
+                })
+    
+    return batch_edges
+
 def generate_person_organization_edges():
     try:
         clear_terminal()
@@ -100,7 +154,7 @@ def generate_person_organization_edges():
         print("Reading organization data from node_data.csv...")
         node_df = pd.read_csv('src/data/input/node_data.csv', usecols=['node_id', 'node_type'])
         
-        # Get organization nodes
+        # Get organization nodes and convert to list for faster access
         organization_nodes = node_df[node_df['node_type'] == 'organization']
         if organization_nodes.empty:
             print("Warning: No organization nodes found in node_data.csv")
@@ -108,44 +162,40 @@ def generate_person_organization_edges():
         
         print(f"Found {len(organization_nodes)} organization nodes")
         
+        # Convert to lists and sets for faster operations
+        organization_ids = organization_nodes['node_id'].tolist()
+        
         # Initialize edge data and counters
         edges = []
-        missing_nodes = set()
         edge_type_count = 0
         
-        # Configuration for edge generation
-        # Probability that a person will have an organization edge (0.0 to 1.0)
-        person_has_org_probability = 0.7  # 70% of persons will have organization edges
+        # Optimized batch processing with multiprocessing
+        print("\nGenerating person_organization edges with optimized processing...")
         
-        # Maximum number of organizations a person can belong to
-        max_orgs_per_person = 3
+        # Calculate optimal batch size based on data size
+        total_persons = len(person_ids)
+        num_cores = mp.cpu_count()
+        batch_size = max(1, total_persons // (num_cores * 2))  # Larger batches for better performance
         
-        # Generate edges for each person with progress bar
-        print("\nGenerating person_organization edges...")
-        for person_id in tqdm(person_ids, desc="Processing person nodes"):
-            # Determine if this person will have organization edges
-            if random.random() < person_has_org_probability:
-                # Random number of organizations (1 to max_orgs_per_person)
-                num_org_edges = random.randint(1, min(max_orgs_per_person, len(organization_nodes)))
-                selected_organizations = organization_nodes.sample(n=num_org_edges)
-                
-                for _, organization in selected_organizations.iterrows():
-                    org_id = organization['node_id']
-                    edges.append({
-                        'edge_id': str(uuid.uuid4()),
-                        'node_id_from': person_id,
-                        'node_id_to': org_id,
-                        'edge_type': 'person_organization',
-                        'edge_name': 'workAt',
-                        'edge_properties': {
-                            'ORG_TYPE': 'EMPLOYER',
-                            'ADDR_FROM_DATE': f"{random.randint(2010, 2024)}-{random.randint(1, 12):02d}-{random.randint(1, 28):02d}",
-                            'ADDR_THRU_DATE': f"{random.randint(2010, 2024)}-{random.randint(1, 12):02d}-{random.randint(1, 28):02d}",
-                            'EMPLOYMENT_START_DATE': f"{random.randint(2010, 2024)}-{random.randint(1, 12):02d}-{random.randint(1, 28):02d}",
-                            'EMPLOYMENT_END_DATE': f"{random.randint(2010, 2024)}-{random.randint(1, 12):02d}-{random.randint(1, 28):02d}"
-                        }
-                    })
-                    edge_type_count += 1
+        print(f"Using {num_cores} CPU cores with batch size of {batch_size}")
+        
+        # Create batches
+        batches = []
+        for i in range(0, total_persons, batch_size):
+            batch_end = min(i + batch_size, total_persons)
+            batch_person_ids = person_ids[i:batch_end]
+            batches.append((batch_person_ids, organization_ids, i))
+        
+        # Process batches in parallel
+        with ThreadPoolExecutor(max_workers=num_cores) as executor:
+            # Submit all batches
+            future_to_batch = {executor.submit(process_person_batch, batch): batch for batch in batches}
+            
+            # Collect results with progress bar
+            for future in tqdm(as_completed(future_to_batch), total=len(batches), desc="Processing batches"):
+                batch_edges = future.result()
+                edges.extend(batch_edges)
+                edge_type_count += len(batch_edges)
         
         # Save all edges as a single JSON array
         os.makedirs('src/data/output/gds', exist_ok=True)
@@ -196,26 +246,28 @@ def generate_person_organization_edges():
         for count in sorted(edges_per_org_dist.keys()):
             print(f"Organizations with {count} person edges: {edges_per_org_dist[count]}")
         
-        if validation_results['missing_from_nodes']:
-            print(f"\nMissing or invalid person nodes: {len(validation_results['missing_from_nodes'])}")
-            print("Sample of missing person nodes:", list(validation_results['missing_from_nodes'])[:5])
+        # Print processing statistics
+        print(f"\nProcessing Statistics:")
+        print(f"Total processing time: {processing_time:.2f} seconds")
+        print(f"Edges generated per second: {edge_type_count / processing_time:.2f}")
+        print(f"Average edges per person: {edge_type_count / len(person_ids):.2f}")
         
-        if validation_results['missing_to_nodes']:
-            print(f"\nMissing or invalid organization nodes: {len(validation_results['missing_to_nodes'])}")
-            print("Sample of missing organization nodes:", list(validation_results['missing_to_nodes'])[:5])
-        
-        print(f"\nProcessing time: {processing_time:.2f} seconds")
-        print(f"Generated {len(edges)} person-organization edges")
-        print(f"Saved to src/data/output/gds/mock_person-organization_data.json")
+        if validation_results['invalid_edges'] > 0:
+            print(f"\nWARNING: {validation_results['invalid_edges']} invalid edges detected!")
+            if validation_results['missing_from_nodes']:
+                print(f"Missing from nodes: {len(validation_results['missing_from_nodes'])}")
+            if validation_results['missing_to_nodes']:
+                print(f"Missing to nodes: {len(validation_results['missing_to_nodes'])}")
+        else:
+            print("\n✓ All edges are valid!")
         
         return edges
         
     except Exception as e:
         print(f"Error generating person-organization edges: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return None
 
 if __name__ == "__main__":
-    edges = generate_person_organization_edges()
-    if edges is not None:
-        print("\nSample of Generated Edges:")
-        print(json.dumps(edges[:2], indent=2))
+    generate_person_organization_edges()

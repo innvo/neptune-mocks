@@ -9,6 +9,9 @@ import platform
 import subprocess
 import numpy as np
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import multiprocessing as mp
+from functools import partial
 
 def clear_terminal():
     """Clear the terminal screen based on the operating system"""
@@ -92,6 +95,48 @@ def validate_referential_integrity(edges, node_df):
     
     return validation_results
 
+def process_person_batch(batch_data):
+    """Process a batch of persons to generate phone edges"""
+    person_ids, phone_ids, edge_counts, batch_start_idx = batch_data
+    batch_edges = []
+    used_pairs = set()
+    
+    for i, person_id in enumerate(person_ids):
+        # Get available phones that haven't been used with this person
+        available_phones = [phone_id for phone_id in phone_ids 
+                          if (person_id, phone_id) not in used_pairs]
+        
+        # If no available phones, reuse some (ensures every person gets at least 1 edge)
+        if len(available_phones) == 0:
+            available_phones = phone_ids.copy()
+        
+        # Use pre-generated edge count for this person
+        num_phone_edges = edge_counts[batch_start_idx + i]
+        
+        # Limit the number of edges to available phones (minimum 1, maximum 3)
+        num_phone_edges = max(1, min(num_phone_edges, len(available_phones), 3))
+        
+        # Randomly select phones without replacement
+        selected_phones = random.sample(available_phones, num_phone_edges)
+        
+        for phone_id in selected_phones:
+            # Add to used pairs
+            pair_key = (person_id, phone_id)
+            used_pairs.add(pair_key)
+            
+            # Determine phone type
+            phone_type = random.choice(["MOBILE", "HOME", "WORK"])
+            
+            batch_edges.append({
+                'edge_id': str(uuid.uuid4()),
+                'node_id_from': person_id,
+                'node_id_to': phone_id,
+                'edge_type': 'person_phone',
+                'edge_properties': {}
+            })
+    
+    return batch_edges
+
 def generate_person_phone_edges():
     """
     Generate person-phone edges with the following requirements:
@@ -152,57 +197,42 @@ def generate_person_phone_edges():
         edge_type_count = 0
         phone_type_stats = {'MOBILE': 0, 'HOME': 0, 'WORK': 0}
         
-        # Track used person-phone pairs to avoid duplicates
-        used_pairs = set()
+        # Optimized batch processing with multiprocessing
+        print("\nGenerating person_phone edges with optimized processing...")
         
-        # Generate edges for each person with progress bar
-        print("\nGenerating person_phone edges...")
-        for i, person_id in enumerate(tqdm(person_ids, desc="Processing person nodes")):
-            
-            # Get available phones that haven't been used with this person
-            available_phones = []
-            for phone_id in phone_ids:
-                pair_key = (person_id, phone_id)
-                if pair_key not in used_pairs:
-                    available_phones.append(phone_id)
-            
-            # If no available phones, we need to reuse some (this ensures every person gets at least 1 edge)
-            if len(available_phones) == 0:
-                print(f"\nWARNING: No available phones for person {person_id}, reusing existing phones")
-                # Reset used_pairs for this person to allow reuse
-                available_phones = phone_ids.copy()
-            
-            # Use pre-generated edge count for this person
-            num_phone_edges = edge_counts[i]
-            
-            # Limit the number of edges to available phones (minimum 1, maximum 3)
-            num_phone_edges = max(1, min(num_phone_edges, len(available_phones), 3))
-            
-            # Randomly select phones without replacement
-            selected_phones = random.sample(available_phones, num_phone_edges)
-            
-            for phone_id in selected_phones:
-                # Add to used pairs
-                pair_key = (person_id, phone_id)
-                used_pairs.add(pair_key)
-                
-                # Determine phone type
-                phone_type = random.choice(["MOBILE", "HOME", "WORK"])
-                
-                edges.append({
-                    'edge_id': str(uuid.uuid4()),
-                    'node_id_from': person_id,
-                    'node_id_to': phone_id,
-                    'edge_type': 'person_phone',
-                    'edge_properties': {}
-                })
-                edge_type_count += 1
-                phone_type_stats[phone_type] += 1
+        # Calculate optimal batch size based on data size
+        total_persons = len(person_ids)
+        num_cores = mp.cpu_count()
+        batch_size = max(1, total_persons // (num_cores * 2))  # Larger batches for better performance
         
-        # Save to JSON
-        output_path = os.path.join('src', 'data', 'output', 'gds', 'mock_person-phone_data.json')
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        with open(output_path, 'w') as f:
+        print(f"Using {num_cores} CPU cores with batch size of {batch_size}")
+        
+        # Create batches
+        batches = []
+        for i in range(0, total_persons, batch_size):
+            batch_end = min(i + batch_size, total_persons)
+            batch_person_ids = person_ids[i:batch_end]
+            batches.append((batch_person_ids, phone_ids, edge_counts, i))
+        
+        # Process batches in parallel
+        with ThreadPoolExecutor(max_workers=num_cores) as executor:
+            # Submit all batches
+            future_to_batch = {executor.submit(process_person_batch, batch): batch for batch in batches}
+            
+            # Collect results with progress bar
+            for future in tqdm(as_completed(future_to_batch), total=len(batches), desc="Processing batches"):
+                batch_edges = future.result()
+                edges.extend(batch_edges)
+                edge_type_count += len(batch_edges)
+        
+        # Count phone types for statistics
+        for edge in edges:
+            phone_type = random.choice(["MOBILE", "HOME", "WORK"])
+            phone_type_stats[phone_type] += 1
+        
+        # Save all edges as a single JSON array
+        os.makedirs('src/data/output/gds', exist_ok=True)
+        with open('src/data/output/gds/mock_person-phone_data.json', 'w') as f:
             json.dump(edges, f, indent=2)
         
         # Calculate processing time
@@ -211,52 +241,54 @@ def generate_person_phone_edges():
         # Validate referential integrity
         validation_results = validate_referential_integrity(edges, node_df)
         
+        clear_terminal()
         # Print validation results
         print("\nReferential Integrity Validation Results:")
         print(f"Total edges generated: {validation_results['total_edges']}")
         print(f"Valid edges: {validation_results['valid_edges']}")
         print(f"Invalid edges: {validation_results['invalid_edges']}")
         
-        if validation_results['missing_from_nodes']:
-            print(f"\nMissing from nodes: {len(validation_results['missing_from_nodes'])}")
-            print("Sample of missing from nodes:", list(validation_results['missing_from_nodes'])[:5])
+        # Calculate and display edges per person distribution
+        edges_per_person_dist = {}
+        for person_id, count in validation_results['edges_per_person'].items():
+            edges_per_person_dist[count] = edges_per_person_dist.get(count, 0) + 1
         
-        if validation_results['missing_to_nodes']:
-            print(f"\nMissing to nodes: {len(validation_results['missing_to_nodes'])}")
-            print("Sample of missing to nodes:", list(validation_results['missing_to_nodes'])[:5])
+        print("\nDistribution of Phone Edges per Person:")
+        for count in sorted(edges_per_person_dist.keys()):
+            print(f"Persons with {count} phone edges: {edges_per_person_dist[count]}")
         
-        print("\nNode Type Statistics:")
-        for node_type, stats in validation_results['node_type_stats'].items():
-            print(f"\n{node_type.capitalize()} Nodes:")
-            print(f"  Total: {stats['total']}")
-            print(f"  Used in valid edges: {stats['valid']}")
-        
-        print("\nEdge Type Statistics:")
-        for edge_type, count in validation_results['edge_type_stats'].items():
-            print(f"  {edge_type}: {count} edges")
-        
-        print("\nPerson Edge Distribution:")
-        print(f"  Persons with no phone edges: {validation_results['persons_with_no_edges']}")
-        print(f"  Persons with too many phone edges (>3): {validation_results['persons_with_too_many_edges']}")
-        
+        # Print phone type statistics
         print("\nPhone Type Distribution:")
         for phone_type, count in phone_type_stats.items():
-            print(f"  {phone_type}: {count} edges")
+            print(f"{phone_type}: {count} edges")
         
-        print("\nEdge Generation Statistics:")
-        print(f"Total number of edges generated: {len(edges)}")
-        print(f"Processing time: {processing_time:.2f} seconds")
-        print(f"Edges per second: {len(edges) / processing_time:.2f}")
-        print(f"Data saved to: {output_path}")
+        # Print processing statistics
+        print(f"\nProcessing Statistics:")
+        print(f"Total processing time: {processing_time:.2f} seconds")
+        print(f"Edges generated per second: {edge_type_count / processing_time:.2f}")
+        print(f"Average edges per person: {edge_type_count / len(person_ids):.2f}")
+        
+        # Print validation summary
+        print(f"\nValidation Summary:")
+        print(f"Persons with no phone edges: {validation_results['persons_with_no_edges']}")
+        print(f"Persons with too many phone edges (>3): {validation_results['persons_with_too_many_edges']}")
+        
+        if validation_results['invalid_edges'] > 0:
+            print(f"\nWARNING: {validation_results['invalid_edges']} invalid edges detected!")
+            if validation_results['missing_from_nodes']:
+                print(f"Missing from nodes: {len(validation_results['missing_from_nodes'])}")
+            if validation_results['missing_to_nodes']:
+                print(f"Missing to nodes: {len(validation_results['missing_to_nodes'])}")
+        else:
+            print("\n✓ All edges are valid!")
         
         return edges
         
     except Exception as e:
         print(f"Error generating person-phone edges: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return None
 
 if __name__ == "__main__":
-    edges = generate_person_phone_edges()
-    if edges is not None:
-        print("\nSample of Generated Person-Phone Edges:")
-        print(json.dumps(edges[:5], indent=2)) 
+    generate_person_phone_edges() 

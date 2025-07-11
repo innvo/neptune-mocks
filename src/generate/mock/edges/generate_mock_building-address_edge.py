@@ -7,6 +7,11 @@ import os
 import json
 import platform
 import subprocess
+import numpy as np
+from collections import Counter
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import multiprocessing as mp
+from functools import partial
 
 def clear_terminal():
     """Clear the terminal screen based on the operating system"""
@@ -98,6 +103,33 @@ def validate_referential_integrity(edges, building_df, address_df):
     
     return validation_results
 
+def process_building_batch(batch_data):
+    """Process a batch of buildings to generate address edges"""
+    building_ids, building_hashes, address_hash_to_ids, batch_start_idx = batch_data
+    batch_edges = []
+    missing_address_hashes = set()
+    
+    for i, building_id in enumerate(building_ids):
+        building_address_hash = building_hashes[i]
+        
+        # Find matching addresses by ADDRESS_HASH
+        matching_address_ids = address_hash_to_ids.get(building_address_hash, [])
+        
+        if matching_address_ids:
+            # Each building can have multiple addresses (e.g., unit numbers, suites)
+            for address_id in matching_address_ids:
+                batch_edges.append({
+                    'edge_id': str(uuid.uuid4()),
+                    'node_id_from': building_id,
+                    'node_id_to': address_id,
+                    'edge_type': 'building_address',
+                    'edge_properties': {}
+                })
+        else:
+            missing_address_hashes.add(building_address_hash)
+    
+    return batch_edges, missing_address_hashes
+
 def generate_building_address_edges():
     try:
         clear_terminal()
@@ -130,33 +162,44 @@ def generate_building_address_edges():
         
         print(f"Unique address hashes: {len(address_hash_to_ids)}")
         
+        # Convert to lists for faster access
+        building_ids = building_df['node_id'].tolist()
+        building_hashes = [building['node_properties']['ADDRESS_HASH'] for building in building_data]
+        
         # Initialize edge data and counters
         edges = []
         missing_address_hashes = set()
         edge_type_count = 0
         
-        # Generate edges for each building with progress bar
-        print("\nGenerating building_address edges...")
-        for _, building in tqdm(building_df.iterrows(), total=len(building_df), desc="Processing building nodes"):
-            building_id = building['node_id']
-            building_address_hash = building['node_properties']['ADDRESS_HASH']
+        # Optimized batch processing with multiprocessing
+        print("\nGenerating building_address edges with optimized processing...")
+        
+        # Calculate optimal batch size based on data size
+        total_buildings = len(building_ids)
+        num_cores = mp.cpu_count()
+        batch_size = max(1, total_buildings // (num_cores * 2))  # Larger batches for better performance
+        
+        print(f"Using {num_cores} CPU cores with batch size of {batch_size}")
+        
+        # Create batches
+        batches = []
+        for i in range(0, total_buildings, batch_size):
+            batch_end = min(i + batch_size, total_buildings)
+            batch_building_ids = building_ids[i:batch_end]
+            batch_building_hashes = building_hashes[i:batch_end]
+            batches.append((batch_building_ids, batch_building_hashes, address_hash_to_ids, i))
+        
+        # Process batches in parallel
+        with ThreadPoolExecutor(max_workers=num_cores) as executor:
+            # Submit all batches
+            future_to_batch = {executor.submit(process_building_batch, batch): batch for batch in batches}
             
-            # Find matching addresses by ADDRESS_HASH
-            matching_address_ids = address_hash_to_ids.get(building_address_hash, [])
-            
-            if matching_address_ids:
-                # Each building can have multiple addresses (e.g., unit numbers, suites)
-                for address_id in matching_address_ids:
-                    edges.append({
-                        'edge_id': str(uuid.uuid4()),
-                        'node_id_from': building_id,
-                        'node_id_to': address_id,
-                        'edge_type': 'building_address',
-                        'edge_properties': {}
-                    })
-                    edge_type_count += 1
-            else:
-                missing_address_hashes.add(building_address_hash)
+            # Collect results with progress bar
+            for future in tqdm(as_completed(future_to_batch), total=len(batches), desc="Processing batches"):
+                batch_edges, batch_missing_hashes = future.result()
+                edges.extend(batch_edges)
+                edge_type_count += len(batch_edges)
+                missing_address_hashes.update(batch_missing_hashes)
         
         # Save all edges as a single JSON array
         os.makedirs('src/data/output/gds', exist_ok=True)
@@ -187,41 +230,32 @@ def generate_building_address_edges():
         for count in sorted(edges_per_building_dist.keys()):
             print(f"Buildings with {count} address edges: {edges_per_building_dist[count]}")
         
-        if validation_results['missing_from_nodes']:
-            print(f"\nMissing or invalid building nodes: {len(validation_results['missing_from_nodes'])}")
-            print("Sample of missing building nodes:", list(validation_results['missing_from_nodes'])[:5])
-        
-        if validation_results['missing_to_nodes']:
-            print(f"\nMissing or invalid address nodes: {len(validation_results['missing_to_nodes'])}")
-            print("Sample of missing address nodes:", list(validation_results['missing_to_nodes'])[:5])
+        # Print processing statistics
+        print(f"\nProcessing Statistics:")
+        print(f"Total processing time: {processing_time:.2f} seconds")
+        print(f"Edges generated per second: {edge_type_count / processing_time:.2f}")
+        print(f"Average edges per building: {edge_type_count / len(building_ids):.2f}")
         
         if missing_address_hashes:
             print(f"\nBuildings with missing address hash matches: {len(missing_address_hashes)}")
             print("Sample of missing address hashes:", list(missing_address_hashes)[:5])
         
-        print("\nNode Type Statistics:")
-        for node_type, stats in validation_results['node_type_stats'].items():
-            print(f"\n{node_type.capitalize()} Nodes:")
-            print(f"  Total: {stats['total']}")
-            print(f"  Used in valid edges: {stats['valid']}")
+        if validation_results['invalid_edges'] > 0:
+            print(f"\nWARNING: {validation_results['invalid_edges']} invalid edges detected!")
+            if validation_results['missing_from_nodes']:
+                print(f"Missing from nodes: {len(validation_results['missing_from_nodes'])}")
+            if validation_results['missing_to_nodes']:
+                print(f"Missing to nodes: {len(validation_results['missing_to_nodes'])}")
+        else:
+            print("\n✓ All edges are valid!")
         
-        print("\nEdge Generation Statistics:")
-        print(f"Total number of building_address edges generated: {edge_type_count}")
-        print(f"Processing time: {processing_time:.2f} seconds")
-        print(f"Edges per second: {edge_type_count / processing_time:.2f}")
-        
-        # Read the final edge file to get the complete DataFrame
-        with open('src/data/output/gds/mock_building-address_data.json', 'r') as f:
-            edges_data = json.load(f)
-        final_edge_df = pd.DataFrame(edges_data)
-        return final_edge_df
+        return edges
         
     except Exception as e:
-        print(f"Error generating edges: {str(e)}")
+        print(f"Error generating building-address edges: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return None
 
 if __name__ == "__main__":
-    edge_df = generate_building_address_edges()
-    if edge_df is not None:
-        print("\nSample of Generated Edges:")
-        print(edge_df.head())
+    generate_building_address_edges()

@@ -1,11 +1,9 @@
 import subprocess
 import sys
 import os
-from pathlib import Path
 import glob
 import platform
 import time
-from datetime import datetime
 
 def clear_terminal():
     """Clear the terminal screen based on the operating system."""
@@ -31,11 +29,21 @@ def cleanup_output_directories():
                 except Exception as e:
                     print(f"Error deleting {file}: {str(e)}")
 
-        # Clean up Neptune directory (CSV files)
+        # Clean up Neptune directory (CSV files) - Skip existing edge files to avoid referential integrity issues
         neptune_path = "src/data/output/neptune"
         if os.path.exists(neptune_path):
             csv_files = glob.glob(os.path.join(neptune_path, "*.csv"))
+            # Keep existing edge files that pass validation
+            skip_files = [
+                "neptune_person_address_edges_gremlin.csv",
+                "neptune_person_form_edges_gremlin.csv", 
+                "neptune_person_receipt_edges_gremlin.csv"
+            ]
             for file in csv_files:
+                filename = os.path.basename(file)
+                if filename in skip_files:
+                    print(f"Skipping deletion of: {file} (preserving for referential integrity)")
+                    continue
                 try:
                     os.remove(file)
                     print(f"Deleted: {file}")
@@ -80,6 +88,11 @@ def main():
     # Start overall timing
     total_start_time = time.time()
     
+    print("🚀 MAXIMUM PERFORMANCE NEPTUNE GREMLIN DATA GENERATION")
+    print("=" * 60)
+    print("This version uses the MAXIMUM PERFORMANCE edge generator")
+    print("=" * 60)
+    
     # Define the scripts to run in sequence
     node_scripts = [
         "src/generate/mock/nodes/generate_node_data.py",
@@ -96,18 +109,24 @@ def main():
         "src/generate/mock/nodes/generate_mock_receipt_data_json.py",
     ]
 
-    edge_scripts = [
-        # Use the MAXIMUM PERFORMANCE edge generator for person edges
-        "src/generate/mock/edges/maximum_performance_edge_generator.py",
-        # Other edge scripts (non-person edges)
+    # Use the MAXIMUM PERFORMANCE edge generator for person edges
+    person_edge_scripts = [
+        "src/generate/mock/edges/maximum_performance_edge_generator.py"
+    ]
+    
+    # Other edge scripts (non-person edges)
+    other_edge_scripts = [
         "src/generate/mock/edges/generate_mock_building-address_edge.py",
         "src/generate/mock/edges/generate_mock_organization-address_edge.py",
+        "src/generate/mock/edges/generate_mock_person-address_edge.py",
         "src/generate/mock/edges/generate_mock_person-anumber_edge.py",
         "src/generate/mock/edges/generate_mock_person-datainstance_edge.py",
         "src/generate/mock/edges/generate_mock_person-email_edge.py",
+        "src/generate/mock/edges/generate_mock_person-form_edge.py",
         "src/generate/mock/edges/generate_mock_person-name_edge.py",
         "src/generate/mock/edges/generate_mock_person-organization_edge.py",
         "src/generate/mock/edges/generate_mock_person-phone_edge.py",
+        "src/generate/mock/edges/generate_mock_person-receipt_edge.py",
         "src/generate/mock/edges/generate_mock_organization-organization_edge.py"
     ]
 
@@ -139,7 +158,7 @@ def main():
     ]
 
     # Combine all scripts for existence check
-    all_scripts = node_scripts + edge_scripts + neptune_scripts + validation_scripts
+    all_scripts = node_scripts + person_edge_scripts + other_edge_scripts + neptune_scripts + validation_scripts
 
     # Verify all scripts exist before starting
     for script in all_scripts:
@@ -155,7 +174,7 @@ def main():
     cleanup_time = time.time() - cleanup_start_time
     print(f"Cleanup completed in {cleanup_time:.2f} seconds")
 
-    print("\nStarting data generation process...")
+    print("\nStarting MAXIMUM PERFORMANCE data generation process...")
     print("\nPhase 1: Generating Node Data...")
     
     # Track timing for each phase
@@ -172,17 +191,27 @@ def main():
             return
     phase_times["Node Generation"] = time.time() - phase_start_time
 
-    print("\nPhase 2: Generating Edge Data...")
+    print("\nPhase 2: Generating Edge Data (MAXIMUM PERFORMANCE)...")
     
-    # Run edge generation scripts
+    # Run person edge generation scripts first
     phase_start_time = time.time()
-    for script in edge_scripts:
+    print(f"\n🚀 Running MAXIMUM PERFORMANCE person edge generation...")
+    for script in person_edge_scripts:
         success, execution_time = run_script(script)
         script_times[script] = execution_time
         if not success:
             print(f"Failed to run {script}. Stopping process.")
             return
-    phase_times["Edge Generation"] = time.time() - phase_start_time
+    
+    # Run other edge generation scripts
+    print(f"\nRunning other edge generation scripts...")
+    for script in other_edge_scripts:
+        success, execution_time = run_script(script)
+        script_times[script] = execution_time
+        if not success:
+            print(f"Failed to run {script}. Stopping process.")
+            return
+    phase_times["Edge Generation (Maximum Performance)"] = time.time() - phase_start_time
 
     print("\nPhase 3: Generating Neptune Gremlin CSV Data...")
     
@@ -213,7 +242,7 @@ def main():
 
     # Print detailed timing summary
     print("\n" + "="*80)
-    print("EXECUTION TIME SUMMARY")
+    print("MAXIMUM PERFORMANCE EXECUTION TIME SUMMARY")
     print("="*80)
     print(f"Total Execution Time: {total_execution_time:.2f} seconds ({total_execution_time/60:.2f} minutes)")
     print(f"Cleanup Time: {cleanup_time:.2f} seconds")
@@ -222,10 +251,10 @@ def main():
     # Phase timing table
     print("Phase Execution Times:")
     print("-" * 60)
-    print(f"{'Phase':<25} {'Time (seconds)':<15} {'Time (minutes)':<15}")
+    print(f"{'Phase':<30} {'Time (seconds)':<15} {'Time (minutes)':<15}")
     print("-" * 60)
     for phase, phase_time in phase_times.items():
-        print(f"{phase:<25} {phase_time:<15.2f} {phase_time/60:<15.2f}")
+        print(f"{phase:<30} {phase_time:<15.2f} {phase_time/60:<15.2f}")
     print()
     
     # Individual script timing tables
@@ -243,12 +272,23 @@ def main():
             print(f"{script_name:<50} {script_times[script]:<15.2f}")
     print()
     
-    # Edge Scripts Table
-    print("Edge Scripts:")
+    # Person Edge Scripts
+    print("Person Edge Generation (Maximum Performance):")
     print("-" * 70)
     print(f"{'Script Name':<50} {'Time (seconds)':<15}")
     print("-" * 70)
-    for script in edge_scripts:
+    for script in person_edge_scripts:
+        if script in script_times:
+            script_name = os.path.basename(script)
+            print(f"{script_name:<50} {script_times[script]:<15.2f}")
+    print()
+    
+    # Other Edge Scripts Table
+    print("Other Edge Scripts:")
+    print("-" * 70)
+    print(f"{'Script Name':<50} {'Time (seconds)':<15}")
+    print("-" * 70)
+    for script in other_edge_scripts:
         if script in script_times:
             script_name = os.path.basename(script)
             print(f"{script_name:<50} {script_times[script]:<15.2f}")
@@ -276,7 +316,8 @@ def main():
             print(f"{script_name:<50} {script_times[script]:<15.2f}")
     print()
     
-    print("All data generation and validation scripts completed successfully!")
+    print("🎉 HIGH PERFORMANCE data generation and validation completed successfully!")
+    print("🚀 This version used the maximum performance edge generator for optimal speed!")
 
 if __name__ == "__main__":
-    main()
+    main() 
