@@ -9,7 +9,7 @@ NUM_NODE_RECORDS = 10000 # Number of node records to generate
 NUM_NODE_RECORDS_PER_BATCH = 1000
 #NODE_TYPES = ['person', 'name', 'address', 'anumber', 'receipt', 'form', 'email', 'phone']
 
-NODE_TYPES = ['person', 'address','anumber','datainstance','form','organization','receipt']
+NODE_TYPES = ['person', 'address','anumber','datainstance','email','form','organization','receipt']
 
 # Ensure the data/input directory exists
 os.makedirs('src/data/input', exist_ok=True)
@@ -22,7 +22,7 @@ def generate_node_data():
     
     # Calculate remaining nodes for other types
     remaining_nodes = NUM_NODE_RECORDS - target_person_count - target_datainstance_count
-    other_types = ['address', 'anumber', 'form', 'organization', 'receipt']
+    other_types = ['address', 'anumber', 'email', 'form', 'organization', 'receipt']
     
     # Distribute remaining nodes among other types
     nodes_per_other_type = remaining_nodes // len(other_types)

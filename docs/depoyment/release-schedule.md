@@ -5,7 +5,7 @@
 | address | Secondary | 1.2 |   |
 | building | Primary | 1.0 MVP | Done |
 | datainstance | Secondary | 1.0 | WIP |
-| email | Secondary | 1.2 |   |
+| email | Secondary | 1.2 | WIP |
 | encounter | Secondary | 1.2 |   |
 | form | Secondary | 1.1 |   |
 | iperson | Secondary | 1.2 |   |

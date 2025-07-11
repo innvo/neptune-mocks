@@ -76,6 +76,7 @@ def main():
         "src/generate/mock/nodes/generate_mock_anumber_data_json.py",
         "src/generate/mock/nodes/generate_mock_building_data_json.py",
         "src/generate/mock/nodes/generate_mock_datainstance_data_json.py",
+        "src/generate/mock/nodes/generate_mock_email_data_json.py",
         "src/generate/mock/nodes/generate_mock_form_data_json.py",
         "src/generate/mock/nodes/generate_mock_receipt_data_json.py",
         "src/generate/mock/nodes/generate_mock_name_data_json.py",
@@ -88,6 +89,7 @@ def main():
         "src/generate/mock/edges/generate_mock_person-address_edge.py",
         "src/generate/mock/edges/generate_mock_person-anumber_edge.py",
         "src/generate/mock/edges/generate_mock_person-datainstance_edge.py",
+        "src/generate/mock/edges/generate_mock_person-email_edge.py",
         "src/generate/mock/edges/generate_mock_person-form_edge.py",
         "src/generate/mock/edges/generate_mock_person-name_edge.py",
         "src/generate/mock/edges/generate_mock_person-organization_edge.py",
@@ -100,6 +102,7 @@ def main():
         "src/generate/neptune/gremlin/generate_neptune_address_json_gremlin_csv.py",
         "src/generate/neptune/gremlin/generate_neptune_anumber_json_gremlin_csv.py",
         "src/generate/neptune/gremlin/generate_neptune_datainstance_json_gremlin_csv.py",
+        "src/generate/neptune/gremlin/generate_neptune_email_json_gremlin_csv.py",
         "src/generate/neptune/gremlin/generate_neptune_form_json_gremlin_csv.py",
         "src/generate/neptune/gremlin/generate_neptune_receipt_json_gremlin_csv.py",
         "src/generate/neptune/gremlin/generate_neptune_building_json_gremlin_csv.py",
@@ -109,7 +112,8 @@ def main():
         "src/generate/neptune/gremlin/generate_neptune_person-address_json_gremlin_csv.py",
         "src/generate/neptune/gremlin/generate_neptune_person-anumber_json_gremlin_csv.py",
         "src/generate/neptune/gremlin/generate_neptune_person-datainstance_json_gremlin_csv.py",
-        "src/generate/neptune/gremlin/generate_neptune_person-form_json_gremlin_csv.py",
+        "src/generate/neptune/gremlin/generate_neptune_person-email_json_gremlin_csv.py",
+        "src/generate/neptune/gremlin/generate_neptune_person-form_json_gremlin_csv.py",    
         "src/generate/neptune/gremlin/generate_neptune_person-organization_json_gremlin_csv.py",
         "src/generate/neptune/gremlin/generate_neptune_person-receipt_json_gremlin_csv.py"
     ]
