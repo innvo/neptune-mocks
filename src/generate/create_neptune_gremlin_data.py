@@ -4,6 +4,8 @@ import os
 from pathlib import Path
 import glob
 import platform
+import time
+from datetime import datetime
 
 def clear_terminal():
     """Clear the terminal screen based on the operating system."""
@@ -48,25 +50,35 @@ def cleanup_output_directories():
 
 def run_script(script_path):
     """Run a Python script and return True if successful, False otherwise."""
+    start_time = time.time()
     try:
         print(f"\nRunning {script_path}...")
         result = subprocess.run([sys.executable, script_path], check=True)
+        end_time = time.time()
+        execution_time = end_time - start_time
         if result.returncode == 0:
-            print(f"Successfully completed {script_path}")
-            return True
+            print(f"Successfully completed {script_path} in {execution_time:.2f} seconds")
+            return True, execution_time
         else:
             print(f"Error running {script_path}")
-            return False
+            return False, execution_time
     except subprocess.CalledProcessError as e:
+        end_time = time.time()
+        execution_time = end_time - start_time
         print(f"Error running {script_path}: {str(e)}")
-        return False
+        return False, execution_time
     except Exception as e:
+        end_time = time.time()
+        execution_time = end_time - start_time
         print(f"Unexpected error running {script_path}: {str(e)}")
-        return False
+        return False, execution_time
 
 def main():
     # Clear terminal on startup
     clear_terminal()
+    
+    # Start overall timing
+    total_start_time = time.time()
     
     # Define the scripts to run in sequence
     node_scripts = [
@@ -136,44 +148,135 @@ def main():
             return
 
     print("Starting cleanup process...")
+    cleanup_start_time = time.time()
     if not cleanup_output_directories():
         print("Cleanup failed. Stopping process.")
         return
+    cleanup_time = time.time() - cleanup_start_time
+    print(f"Cleanup completed in {cleanup_time:.2f} seconds")
 
     print("\nStarting data generation process...")
     print("\nPhase 1: Generating Node Data...")
     
+    # Track timing for each phase
+    phase_times = {}
+    script_times = {}
+    
     # Run node generation scripts
+    phase_start_time = time.time()
     for script in node_scripts:
-        if not run_script(script):
+        success, execution_time = run_script(script)
+        script_times[script] = execution_time
+        if not success:
             print(f"Failed to run {script}. Stopping process.")
             return
+    phase_times["Node Generation"] = time.time() - phase_start_time
 
     print("\nPhase 2: Generating Edge Data...")
     
     # Run edge generation scripts
+    phase_start_time = time.time()
     for script in edge_scripts:
-        if not run_script(script):
+        success, execution_time = run_script(script)
+        script_times[script] = execution_time
+        if not success:
             print(f"Failed to run {script}. Stopping process.")
             return
+    phase_times["Edge Generation"] = time.time() - phase_start_time
 
     print("\nPhase 3: Generating Neptune Gremlin CSV Data...")
     
     # Run Neptune Gremlin CSV generation scripts
+    phase_start_time = time.time()
     for script in neptune_scripts:
-        if not run_script(script):
+        success, execution_time = run_script(script)
+        script_times[script] = execution_time
+        if not success:
             print(f"Failed to run {script}. Stopping process.")
             return
+    phase_times["Neptune CSV Generation"] = time.time() - phase_start_time
 
     print("\nPhase 4: Validating Edge Referential Integrity...")
     
     # Run validation scripts
+    phase_start_time = time.time()
     for script in validation_scripts:
-        if not run_script(script):
+        success, execution_time = run_script(script)
+        script_times[script] = execution_time
+        if not success:
             print(f"Failed to run {script}. Stopping process.")
             return
+    phase_times["Validation"] = time.time() - phase_start_time
 
-    print("\nAll data generation and validation scripts completed successfully!")
+    # Calculate total time
+    total_execution_time = time.time() - total_start_time
+
+    # Print detailed timing summary
+    print("\n" + "="*80)
+    print("EXECUTION TIME SUMMARY")
+    print("="*80)
+    print(f"Total Execution Time: {total_execution_time:.2f} seconds ({total_execution_time/60:.2f} minutes)")
+    print(f"Cleanup Time: {cleanup_time:.2f} seconds")
+    print()
+    
+    # Phase timing table
+    print("Phase Execution Times:")
+    print("-" * 60)
+    print(f"{'Phase':<25} {'Time (seconds)':<15} {'Time (minutes)':<15}")
+    print("-" * 60)
+    for phase, phase_time in phase_times.items():
+        print(f"{phase:<25} {phase_time:<15.2f} {phase_time/60:<15.2f}")
+    print()
+    
+    # Individual script timing tables
+    print("Individual Script Execution Times:")
+    print()
+    
+    # Node Scripts Table
+    print("Node Scripts:")
+    print("-" * 70)
+    print(f"{'Script Name':<50} {'Time (seconds)':<15}")
+    print("-" * 70)
+    for script in node_scripts:
+        if script in script_times:
+            script_name = os.path.basename(script)
+            print(f"{script_name:<50} {script_times[script]:<15.2f}")
+    print()
+    
+    # Edge Scripts Table
+    print("Edge Scripts:")
+    print("-" * 70)
+    print(f"{'Script Name':<50} {'Time (seconds)':<15}")
+    print("-" * 70)
+    for script in edge_scripts:
+        if script in script_times:
+            script_name = os.path.basename(script)
+            print(f"{script_name:<50} {script_times[script]:<15.2f}")
+    print()
+    
+    # Neptune CSV Scripts Table
+    print("Neptune CSV Scripts:")
+    print("-" * 70)
+    print(f"{'Script Name':<50} {'Time (seconds)':<15}")
+    print("-" * 70)
+    for script in neptune_scripts:
+        if script in script_times:
+            script_name = os.path.basename(script)
+            print(f"{script_name:<50} {script_times[script]:<15.2f}")
+    print()
+    
+    # Validation Scripts Table
+    print("Validation Scripts:")
+    print("-" * 70)
+    print(f"{'Script Name':<50} {'Time (seconds)':<15}")
+    print("-" * 70)
+    for script in validation_scripts:
+        if script in script_times:
+            script_name = os.path.basename(script)
+            print(f"{script_name:<50} {script_times[script]:<15.2f}")
+    print()
+    
+    print("All data generation and validation scripts completed successfully!")
 
 if __name__ == "__main__":
     main()
