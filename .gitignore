@@ -36,6 +36,7 @@ ENV/
 opensearch-data
 src/data/input/**
 src/data/output/**
+src/neptune-performance-test/csv_output/**
 *.log
 
 # OS specific
