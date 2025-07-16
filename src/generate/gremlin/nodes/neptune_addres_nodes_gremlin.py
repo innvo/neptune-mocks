@@ -26,28 +26,14 @@ def find_dotenv(start_dir):
         current_dir = parent_dir
     return None
 
-def generate_person_record():
-    """Generate a single person record"""
-    first_name = fake.first_name()
-    last_name = fake.last_name()
-    full_name = f"{first_name} {last_name}".upper()
-    
-    birth_date = fake.date_of_birth(minimum_age=18, maximum_age=80)
-    birth_date_str = birth_date.strftime('%Y-%m-%d')
-    
-    # 70% chance of having anumber
-    anumber_primary = f"A{random.randint(10000000, 99999999)}" if random.random() > 0.3 else ""
-    
+def generate_address_record():
+    """Generate a single addressrecord"""
+   
     node_id = str(uuid.uuid4())
     
     return {
         '~id': node_id,
-        'node_id:String': node_id,
-        'node_name:String': full_name,
-        'name_full:String': full_name,
-        'date_of_birth:Date': birth_date_str,
-        'anumber_primary:String': anumber_primary,
-        '~label': 'person'
+        '~label': 'address'
     }
 
 def stream_to_csv(num_records, output_path, column_order, progress_interval=10000):
@@ -68,7 +54,7 @@ def stream_to_csv(num_records, output_path, column_order, progress_interval=1000
         
         for i in range(num_records):
             # Generate single record
-            record = generate_person_record()
+            record = generate_address_record()
             
             # Write record immediately
             ordered_record = {col: record.get(col, '') for col in column_order}
@@ -112,12 +98,12 @@ def stream_to_csv(num_records, output_path, column_order, progress_interval=1000
 def estimate_optimal_records_per_file():
     """Estimate optimal number of records per 2.5GB file"""
     # Sample records to calculate average size
-    sample_records = [generate_person_record() for _ in range(100)]
+    sample_records = [generate_address_record() for _ in range(100)]
     
     # Calculate average record size
     total_size = 0
     for record in sample_records:
-        line = f"{record['~id']},{record['node_id:String']},{record['node_name:String']},{record['name_full:String']},{record['date_of_birth:Date']},{record['anumber_primary:String']},{record['~label']}\n"
+        line = f"{record['~id']},{record['~label']}\n"
         total_size += len(line.encode('utf-8'))
     
     avg_record_size = total_size / len(sample_records)
@@ -131,23 +117,23 @@ def estimate_optimal_records_per_file():
 
 def validate_env_variables():
     """Validate and return environment variables"""
-    person_records = os.getenv('PERSON_RECORDS')
+    person_records = os.getenv('ADDRESS_RECORDS')
     
     if not person_records:
-        raise ValueError("❌ ERROR: Missing environment variable PERSON_RECORDS. Please set it in your .env file.")
+        raise ValueError("❌ ERROR: Missing environment variable ADDRESS_RECORDS. Please set it in your .env file.")
     
     try:
         num_records = int(person_records)
     except ValueError as e:
-        raise ValueError(f"❌ ERROR: Invalid integer value in PERSON_RECORDS: {e}")
+        raise ValueError(f"❌ ERROR: Invalid integer value in ADDRESS_RECORDS: {e}")
     
     if num_records <= 0:
-        raise ValueError("❌ ERROR: PERSON_RECORDS must be greater than 0.")
+        raise ValueError("❌ ERROR: ADDRESS_RECORDS must be greater than 0.")
     
     return num_records
 
 def main():
-    """Main function to generate mock person data using streaming approach"""
+    """Main function to generate mock address data using streaming approach"""
     
     # Find and load .env file
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -180,13 +166,12 @@ def main():
         
         for file_num in range(num_files):
             records_this_file = min(optimal_records, num_records - total_generated)
-            output_path = f'src/data/output/neptune/nodes/neptune_person_nodes_gremlin_{file_num + 1:05d}.csv'
+            output_path = f'src/data/output/neptune/nodes/neptune_address_nodes_gremlin_{file_num + 1:05d}.csv'
             
             print(f"\n🚀 Streaming file {file_num + 1}/{num_files}: {records_this_file:,} records")
             
             # Define CSV column order
-            column_order = ['~id', 'node_id:String', 'node_name:String', 'name_full:String', 
-                           'date_of_birth:Date', 'anumber_primary:String', '~label']
+            column_order = ['~id', '~label']
             
             records_written, file_size = stream_to_csv(records_this_file, output_path, column_order)
             
@@ -198,20 +183,19 @@ def main():
                 print(f"⚠️  File size limit reached, stopping at {records_written:,} records")
                 break
         
-        print(f"\n✅ Successfully generated {total_generated:,} person nodes in {num_files} files using streaming.")
+        print(f"\n✅ Successfully generated {total_generated:,} address nodes in {num_files} files using streaming.")
         print(f"📁 Total output size: {total_file_size / (1024**3):.2f} GB")
         print(f"📁 Largest file size: {max_file_size / (1024**3):.2f} GB")
         
     else:
         # Single file approach
-        output_path = 'src/data/output/neptune/nodes/neptune_person_nodes_gremlin_00001.csv'
-        column_order = ['~id', 'node_id:String', 'node_name:String', 'name_full:String', 
-                       'date_of_birth:Date', 'anumber_primary:String', '~label']
+        output_path = 'src/data/output/neptune/nodes/neptune_address_nodes_gremlin_00001.csv'
+        column_order = ['~id','~label']
         
         print(f"\n🚀 Streaming all {num_records:,} records to single file...")
         records_written, file_size = stream_to_csv(num_records, output_path, column_order)
         
-        print(f"\n✅ Successfully generated {records_written:,} person nodes using streaming.")
+        print(f"\n✅ Successfully generated {records_written:,} address nodes using streaming.")
         print(f"📁 File size: {file_size / (1024**3):.2f} GB")
         
         # Set max_file_size for single file case
