@@ -19,17 +19,18 @@ Environment Variables:
 - NEPTUNE_IAM_ROLE_ARN: IAM role ARN for S3 access (required)
 - AWS_REGION: AWS region (default: us-east-1)
 - S3_BUCKET: S3 bucket name (default: deam-neptune)
-- NEPTUNE_MAX_WORKERS: Maximum concurrent workers (default: 5)
+- NEPTUNE_MAX_WORKERS: Maximum concurrent workers (default: 10 - high performance)
 - NEPTUNE_USE_SEQUENTIAL: Use sequential submission to respect Neptune's concurrent load limits (default: true)
-- NEPTUNE_PERFORMANCE_MODE: Enable high-performance mode with optimized settings (default: false)
+- NEPTUNE_WAIT_FOR_COMPLETION: Wait for each load to complete before submitting next file (default: true)
+- NEPTUNE_PERFORMANCE_MODE: Enable legacy performance mode (default: false - high performance is now default)
 - NEPTUNE_ULTRA_MODE: Enable ultra-performance mode for Neptune clusters with high concurrent limits (default: false)
-- NEPTUNE_TIMEOUT: Request timeout in seconds (default: 300)
-- NEPTUNE_CONNECT_TIMEOUT: Connection timeout in seconds (default: 30)
-- NEPTUNE_RETRY_ATTEMPTS: Number of retry attempts (default: 3)
-- NEPTUNE_RETRY_DELAY: Delay between retries in seconds (default: 5)
-- NEPTUNE_PARALLELISM: Neptune loader parallelism (default: HIGH)
-- NEPTUNE_FAIL_ON_ERROR: Whether to fail on errors (default: true)
-- NEPTUNE_QUEUE_REQUEST: Whether to queue requests (default: true)
+- NEPTUNE_TIMEOUT: Request timeout in seconds (default: 1800 - 30 minutes)
+- NEPTUNE_CONNECT_TIMEOUT: Connection timeout in seconds (default: 60 - 1 minute)
+- NEPTUNE_RETRY_ATTEMPTS: Number of retry attempts (default: 1 - minimal for speed)
+- NEPTUNE_RETRY_DELAY: Delay between retries in seconds (default: 2 - short for speed)
+- NEPTUNE_PARALLELISM: Neptune loader parallelism (default: OVERSUBSCRIBE - maximum)
+- NEPTUNE_FAIL_ON_ERROR: Whether to fail on errors (default: false - continue on errors)
+- NEPTUNE_QUEUE_REQUEST: Whether to queue requests (default: false - immediate submission)
 - NEPTUNE_DEBUG: Enable debug logging (default: false)
 """
 
@@ -67,6 +68,7 @@ class NeptuneConfig:
     retry_delay: int = 5
     debug_mode: bool = False
     use_sequential: bool = True  # Default to sequential to respect Neptune's concurrent load limits
+    wait_for_completion: bool = True  # Default to waiting for each load to complete before next submission
     
     @classmethod
     def from_env(cls) -> 'NeptuneConfig':
@@ -76,16 +78,17 @@ class NeptuneConfig:
             iam_role_arn=os.getenv('NEPTUNE_IAM_ROLE_ARN', cls.iam_role_arn),
             region=os.getenv('AWS_REGION', cls.region),
             s3_bucket=os.getenv('S3_BUCKET', cls.s3_bucket),
-            max_workers=int(os.getenv('NEPTUNE_MAX_WORKERS', cls.max_workers)),
-            parallelism=os.getenv('NEPTUNE_PARALLELISM', cls.parallelism),
-            fail_on_error=os.getenv('NEPTUNE_FAIL_ON_ERROR', 'true').lower() == 'true',
-            queue_request=os.getenv('NEPTUNE_QUEUE_REQUEST', 'true').lower() == 'true',
-            timeout=int(os.getenv('NEPTUNE_TIMEOUT', cls.timeout)),
-            connect_timeout=int(os.getenv('NEPTUNE_CONNECT_TIMEOUT', cls.connect_timeout)),
-            retry_attempts=int(os.getenv('NEPTUNE_RETRY_ATTEMPTS', cls.retry_attempts)),
-            retry_delay=int(os.getenv('NEPTUNE_RETRY_DELAY', cls.retry_delay)),
+            max_workers=int(os.getenv('NEPTUNE_MAX_WORKERS', 10)),  # Default to high performance
+            parallelism=os.getenv('NEPTUNE_PARALLELISM', 'OVERSUBSCRIBE'),  # Default to maximum parallelism
+            fail_on_error=os.getenv('NEPTUNE_FAIL_ON_ERROR', 'false').lower() == 'true',  # Default to not fail on errors
+            queue_request=os.getenv('NEPTUNE_QUEUE_REQUEST', 'false').lower() == 'true',  # Default to immediate submission
+            timeout=int(os.getenv('NEPTUNE_TIMEOUT', 1800)),  # Default to 30 minutes
+            connect_timeout=int(os.getenv('NEPTUNE_CONNECT_TIMEOUT', 60)),  # Default to 1 minute
+            retry_attempts=int(os.getenv('NEPTUNE_RETRY_ATTEMPTS', 1)),  # Default to minimal retries
+            retry_delay=int(os.getenv('NEPTUNE_RETRY_DELAY', 2)),  # Default to short retry delay
             debug_mode=os.getenv('NEPTUNE_DEBUG', 'false').lower() == 'true',
-            use_sequential=os.getenv('NEPTUNE_USE_SEQUENTIAL', 'true').lower() == 'true'
+            use_sequential=os.getenv('NEPTUNE_USE_SEQUENTIAL', 'true').lower() == 'true',  # Keep sequential for Neptune clusters with limit=1
+            wait_for_completion=os.getenv('NEPTUNE_WAIT_FOR_COMPLETION', 'true').lower() == 'true'  # Wait for each load to complete
         )
     
     @classmethod
@@ -105,7 +108,8 @@ class NeptuneConfig:
             retry_attempts=1,  # Minimal retries for speed
             retry_delay=2,  # Short retry delay
             debug_mode=False,  # Disable debug for performance
-            use_sequential=True  # Use sequential for Neptune clusters with limit=1
+            use_sequential=True,  # Use sequential for Neptune clusters with limit=1
+            wait_for_completion=True  # Wait for each load to complete
         )
     
     @classmethod
@@ -125,7 +129,8 @@ class NeptuneConfig:
             retry_attempts=1,  # Minimal retries for speed
             retry_delay=1,  # Minimal retry delay
             debug_mode=False,  # Disable debug for performance
-            use_sequential=False  # Use concurrent processing
+            use_sequential=False,  # Use concurrent processing
+            wait_for_completion=False  # Don't wait for completion in ultra mode
         )
     
     def validate(self) -> None:
@@ -147,8 +152,9 @@ class NeptuneConfig:
     
     def print_performance_info(self):
         """Print performance configuration information."""
-        print(f"{Fore.CYAN}Performance Configuration:{Style.RESET_ALL}")
+        print(f"{Fore.CYAN}HIGH PERFORMANCE Configuration:{Style.RESET_ALL}")
         print(f"  Submission Mode: {'Sequential' if self.use_sequential else 'Concurrent'}")
+        print(f"  Wait for Completion: {self.wait_for_completion}")
         print(f"  Max Workers: {self.max_workers}")
         print(f"  Parallelism: {self.parallelism}")
         print(f"  Queue Requests: {self.queue_request}")
@@ -159,9 +165,11 @@ class NeptuneConfig:
         
         if self.use_sequential:
             print(f"{Fore.YELLOW}  ⚠️  Sequential mode may be slow for large datasets{Style.RESET_ALL}")
-            print(f"  💡 Set NEPTUNE_PERFORMANCE_MODE=true for maximum speed")
+            print(f"  💡 Set NEPTUNE_ULTRA_MODE=true for maximum speed (if cluster supports >5 concurrent loads)")
         else:
             print(f"{Fore.GREEN}  ✅ Concurrent mode enabled for maximum performance{Style.RESET_ALL}")
+        
+        print(f"{Fore.GREEN}  🚀 HIGH PERFORMANCE MODE ENABLED{Style.RESET_ALL}")
 
 # Configure logging
 def setup_logging(debug_mode: bool = False):
@@ -424,8 +432,10 @@ class NeptuneCurlBulkLoader:
                             if 'Max concurrent load limit breached' in response_data.get('detailedMessage', ''):
                                 self.logger.warning(f"Concurrent load limit breached for {file_key}, will retry with longer delay")
                                 last_exception = f"Concurrent load limit breached: {response_data['detailedMessage']}"
-                                # Use longer delay for concurrent limit errors
-                                time.sleep(self.config.retry_delay * 5)
+                                # Use much longer delay for concurrent limit errors - Neptune needs time to process
+                                wait_time = self.config.retry_delay * 10  # 20 seconds for limit=1 clusters
+                                self.logger.info(f"Waiting {wait_time} seconds for Neptune to process current load...")
+                                time.sleep(wait_time)
                                 continue
                         
                         # Try different response structures
@@ -481,6 +491,57 @@ class NeptuneCurlBulkLoader:
             'attempts': self.config.retry_attempts + 1
         }
     
+    def check_load_status(self, load_id: str) -> str:
+        """Check the status of a load job."""
+        try:
+            curl_cmd = [
+                'curl', '-X', 'GET',
+                f'{self.config.endpoint}/loader/{load_id}',
+                '--connect-timeout', str(self.config.connect_timeout),
+                '--max-time', str(self.config.timeout),
+                '-k',  # Disable SSL verification for localhost
+                '-s'   # Silent mode
+            ]
+            
+            result = subprocess.run(
+                curl_cmd,
+                shell=False,
+                capture_output=True,
+                text=True,
+                timeout=self.config.timeout
+            )
+            
+            if result.returncode == 0:
+                try:
+                    response_data = json.loads(result.stdout)
+                    return response_data.get('payload', {}).get('overallStatus', {}).get('status', 'UNKNOWN')
+                except json.JSONDecodeError:
+                    return 'UNKNOWN'
+            else:
+                return 'UNKNOWN'
+                
+        except Exception as e:
+            self.logger.warning(f"Error checking load status for {load_id}: {e}")
+            return 'UNKNOWN'
+    
+    def wait_for_load_completion(self, load_id: str, max_wait_time: int = 300) -> bool:
+        """Wait for a load job to complete."""
+        start_time = time.time()
+        while time.time() - start_time < max_wait_time:
+            status = self.check_load_status(load_id)
+            if status in ['LOAD_COMPLETED', 'LOAD_FAILED', 'LOAD_CANCELLED']:
+                self.logger.info(f"Load {load_id} completed with status: {status}")
+                return status == 'LOAD_COMPLETED'
+            elif status == 'LOAD_IN_PROGRESS':
+                self.logger.debug(f"Load {load_id} still in progress...")
+                time.sleep(5)  # Wait 5 seconds before checking again
+            else:
+                self.logger.debug(f"Load {load_id} status: {status}")
+                time.sleep(5)
+        
+        self.logger.warning(f"Timeout waiting for load {load_id} to complete")
+        return False
+    
     def submit_jobs_sequential(self, files: List[Dict], job_type: str) -> List[Dict]:
         """Submit jobs sequentially to respect Neptune's concurrent load limits."""
         if not files:
@@ -502,15 +563,23 @@ class NeptuneCurlBulkLoader:
                 completed += 1
                 print_progress(completed, len(files), f"  {job_type} Progress")
                 
-                # Dynamic delay based on file size and performance mode
-                if self.config.retry_delay > 0:
+                # For Neptune clusters with concurrent load limit=1, wait for completion
+                if self.config.wait_for_completion and result['status'] == 'SUBMITTED' and result['load_id'] != 'IMMEDIATE_SUCCESS':
+                    self.logger.info(f"Waiting for load {result['load_id']} to complete before next submission...")
+                    success = self.wait_for_load_completion(result['load_id'])
+                    if not success:
+                        self.logger.warning(f"Load {result['load_id']} may not have completed successfully")
+                else:
+                    # If not waiting for completion or immediate success/failed, add a small delay
                     file_size_mb = file_info.get('size', 0) / (1024 * 1024)
                     if file_size_mb > 100:  # Large files
-                        delay = 0.05  # 50ms for large files
+                        delay = 3.0  # 3 seconds for large files
                     elif file_size_mb > 10:  # Medium files
-                        delay = 0.02  # 20ms for medium files
+                        delay = 2.0  # 2 seconds for medium files
                     else:  # Small files
-                        delay = 0.01  # 10ms for small files
+                        delay = 1.0  # 1 second for small files
+                    
+                    self.logger.info(f"Waiting {delay} seconds before next submission (file size: {file_size_mb:.1f} MB)")
                     time.sleep(delay)
                 
             except Exception as e:
@@ -665,7 +734,7 @@ class NeptuneCurlBulkLoader:
 
 def main():
     """Main function to run the Neptune curl bulk loader."""
-    print_header("Neptune Curl Bulk Loader")
+    print_header("Neptune Curl Bulk Loader - HIGH PERFORMANCE MODE")
     
     # Check for test mode
     test_file = os.getenv('NEPTUNE_TEST_FILE')
@@ -675,16 +744,14 @@ def main():
     ultra_mode = os.getenv('NEPTUNE_ULTRA_MODE', 'false').lower() == 'true'
     
     try:
-        # Load configuration from environment variables
+        # Load configuration from environment variables - Always use high performance
         if ultra_mode:
             print(f"{Fore.RED}Ultra Performance Mode: Using maximum performance configuration{Style.RESET_ALL}")
             print(f"{Fore.RED}⚠️  Only use this for Neptune clusters with concurrent load limit > 5{Style.RESET_ALL}")
             config = NeptuneConfig.ultra_performance()
-        elif performance_mode:
-            print(f"{Fore.YELLOW}Performance Mode: Using high-performance configuration{Style.RESET_ALL}")
-            config = NeptuneConfig.high_performance()
         else:
-            config = NeptuneConfig.from_env()
+            print(f"{Fore.GREEN}HIGH PERFORMANCE MODE: Using optimized high-performance configuration{Style.RESET_ALL}")
+            config = NeptuneConfig.high_performance()
         
         if not config.iam_role_arn:
             print(f"{Fore.RED}Error: NEPTUNE_IAM_ROLE_ARN environment variable is required{Style.RESET_ALL}")

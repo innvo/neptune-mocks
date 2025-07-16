@@ -36,44 +36,24 @@ def find_dotenv(start_dir):
         current_dir = parent_dir
     return None
 
-def generate_person_record():
-    """Generate a single person record - optimized version"""
-    first_name = fake.first_name()
-    last_name = fake.last_name()
-    full_name = f"{first_name} {last_name}".upper()
-    
-    birth_date = fake.date_of_birth(minimum_age=18, maximum_age=80)
-    birth_date_str = birth_date.strftime('%Y-%m-%d')
-    
-    # 70% chance of having anumber
-    anumber_primary = f"A{random.randint(10000000, 99999999)}" if random.random() > 0.3 else ""
-    
+def generate_address_record():
+    """Generate a single address record - optimized version"""
     node_id = str(uuid.uuid4())
     
     # Return as tuple for direct CSV writing (no dictionary overhead)
-    return (node_id, node_id, full_name, full_name, birth_date_str, anumber_primary, 'person')
+    return (node_id, 'address')
 
-def generate_batch_of_records(batch_size):
-    """Generate a batch of records - optimized for parallel processing"""
+def generate_batch_of_address_records(batch_size):
+    """Generate a batch of address records - optimized for parallel processing"""
     records = []
     for _ in range(batch_size):
-        first_name = fake.first_name()
-        last_name = fake.last_name()
-        full_name = f"{first_name} {last_name}".upper()
-        
-        birth_date = fake.date_of_birth(minimum_age=18, maximum_age=80)
-        birth_date_str = birth_date.strftime('%Y-%m-%d')
-        
-        # 70% chance of having anumber
-        anumber_primary = f"A{random.randint(10000000, 99999999)}" if random.random() > 0.3 else ""
-        
         node_id = str(uuid.uuid4())
-        records.append((node_id, node_id, full_name, full_name, birth_date_str, anumber_primary, 'person'))
+        records.append((node_id, 'address'))
     
     return records
 
-def parallel_record_generator(num_records, num_workers=None):
-    """Generate records in parallel using multiple processes"""
+def parallel_address_record_generator(num_records, num_workers=None):
+    """Generate address records in parallel using multiple processes"""
     if num_workers is None:
         num_workers = NUM_WORKERS
     
@@ -90,7 +70,7 @@ def parallel_record_generator(num_records, num_workers=None):
         
         for i in range(num_batches):
             current_batch_size = min(batch_size, remaining_records)
-            future = executor.submit(generate_batch_of_records, current_batch_size)
+            future = executor.submit(generate_batch_of_address_records, current_batch_size)
             futures.append(future)
             remaining_records -= current_batch_size
         
@@ -107,8 +87,67 @@ def parallel_record_generator(num_records, num_workers=None):
             if records_generated % (batch_size * 5) == 0:
                 print(f"📊 Generated {records_generated:,}/{num_records:,} records ({records_generated/num_records*100:.1f}%)")
 
+def stream_to_csv(num_records, output_path, column_order, progress_interval=10000):
+    """Stream records directly to CSV file with progress monitoring"""
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    
+    start_time = time.time()
+    file_size = 0
+    records_written = 0
+    
+    with open(output_path, 'w', newline='', encoding='utf-8') as csvfile:
+        writer = csv.DictWriter(csvfile, fieldnames=column_order, quoting=csv.QUOTE_MINIMAL)
+        writer.writeheader()
+        
+        # Update file size after header
+        csvfile.flush()
+        file_size = os.path.getsize(output_path)
+        
+        for i in range(num_records):
+            # Generate single record
+            record = generate_address_record()
+            
+            # Write record immediately
+            ordered_record = {col: record.get(col, '') for col in column_order}
+            writer.writerow(ordered_record)
+            
+            records_written += 1
+            
+            # Flush periodically to ensure data is written to disk
+            if records_written % 1000 == 0:
+                csvfile.flush()
+                file_size = os.path.getsize(output_path)
+                
+                # Check file size limit
+                if file_size > MAX_FILE_SIZE_BYTES:
+                    print(f"⚠️  WARNING: File size ({file_size / (1024**3):.2f} GB) exceeds 2.5GB limit!")
+                    print(f"   Stopping at {records_written:,} records")
+                    break
+            
+            # Progress reporting
+            if records_written % progress_interval == 0:
+                elapsed = time.time() - start_time
+                rate = records_written / elapsed if elapsed > 0 else 0
+                eta = (num_records - records_written) / rate if rate > 0 else 0
+                
+                print(f"📊 Progress: {records_written:,}/{num_records:,} records "
+                      f"({records_written/num_records*100:.1f}%) "
+                      f"| Rate: {rate:.0f} records/sec "
+                      f"| ETA: {eta/60:.1f} min "
+                      f"| File size: {file_size / (1024**3):.2f} GB")
+    
+    final_file_size = os.path.getsize(output_path)
+    elapsed_time = time.time() - start_time
+    
+    print(f"✅ Streamed {records_written:,} records to {output_path}")
+    print(f"📁 Final file size: {final_file_size / (1024**3):.2f} GB")
+    print(f"⏱️  Total time: {elapsed_time/60:.1f} minutes")
+    print(f"🚀 Average rate: {records_written/elapsed_time:.0f} records/sec")
+    
+    return records_written, final_file_size
+
 def stream_to_csv_parallel(num_records, output_path, column_order, progress_interval=10000):
-    """Stream records to CSV using parallel generation and optimized I/O"""
+    """Stream address records to CSV using parallel generation and optimized I/O"""
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     
     start_time = time.time()
@@ -119,7 +158,7 @@ def stream_to_csv_parallel(num_records, output_path, column_order, progress_inte
         writer.writerow(column_order)  # Write header
         
         # Use parallel record generation
-        record_generator = parallel_record_generator(num_records)
+        record_generator = parallel_address_record_generator(num_records)
         
         # Write records as they're generated
         for record in record_generator:
@@ -155,73 +194,16 @@ def stream_to_csv_parallel(num_records, output_path, column_order, progress_inte
     
     return records_written, final_file_size
 
-def stream_to_csv_optimized(num_records, output_path, column_order, progress_interval=10000):
-    """Stream records directly to CSV file with optimized performance"""
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    
-    start_time = time.time()
-    records_written = 0
-    
-    with open(output_path, 'w', newline='', encoding='utf-8', buffering=8192) as csvfile:
-        writer = csv.writer(csvfile, quoting=csv.QUOTE_MINIMAL)
-        writer.writerow(column_order)  # Write header
-        
-        # Use larger buffer and less frequent flushing
-        flush_interval = 10000  # Flush every 10K records instead of 1K
-        size_check_interval = 50000  # Check file size every 50K records
-        
-        for i in range(num_records):
-            # Generate record as tuple (no dictionary overhead)
-            record = generate_person_record()
-            
-            # Write record directly (no dictionary creation)
-            writer.writerow(record)
-            
-            records_written += 1
-            
-            # Less frequent flushing for better performance
-            if records_written % flush_interval == 0:
-                csvfile.flush()
-                
-                # Less frequent file size checks
-                if records_written % size_check_interval == 0:
-                    file_size = os.path.getsize(output_path)
-                    if file_size > MAX_FILE_SIZE_BYTES:
-                        print(f"⚠️  WARNING: File size ({file_size / (1024**3):.2f} GB) exceeds 2.5GB limit!")
-                        print(f"   Stopping at {records_written:,} records")
-                        break
-            
-            # Progress reporting
-            if records_written % progress_interval == 0:
-                elapsed = time.time() - start_time
-                rate = records_written / elapsed if elapsed > 0 else 0
-                eta = (num_records - records_written) / rate if rate > 0 else 0
-                
-                print(f"📊 Progress: {records_written:,}/{num_records:,} records "
-                      f"({records_written/num_records*100:.1f}%) "
-                      f"| Rate: {rate:.0f} records/sec "
-                      f"| ETA: {eta/60:.1f} min")
-    
-    final_file_size = os.path.getsize(output_path)
-    elapsed_time = time.time() - start_time
-    
-    print(f"✅ Streamed {records_written:,} records to {output_path}")
-    print(f"📁 Final file size: {final_file_size / (1024**3):.2f} GB")
-    print(f"⏱️  Total time: {elapsed_time/60:.1f} minutes")
-    print(f"🚀 Average rate: {records_written/elapsed_time:.0f} records/sec")
-    
-    return records_written, final_file_size
-
 def estimate_optimal_records_per_file():
     """Estimate optimal number of records per 2.5GB file"""
     # Sample records to calculate average size
-    sample_records = [generate_person_record() for _ in range(100)]
+    sample_records = [generate_address_record() for _ in range(100)]
     
     # Calculate average record size
     total_size = 0
     for record in sample_records:
         # Use tuple indexing for the new format
-        line = f"{record[0]},{record[1]},{record[2]},{record[3]},{record[4]},{record[5]},{record[6]}\n"
+        line = f"{record[0]},{record[1]}\n"
         total_size += len(line.encode('utf-8'))
     
     avg_record_size = total_size / len(sample_records)
@@ -235,18 +217,18 @@ def estimate_optimal_records_per_file():
 
 def validate_env_variables():
     """Validate and return environment variables"""
-    person_records = os.getenv('PERSON_RECORDS')
+    person_records = os.getenv('ADDRESS_RECORDS')
     
     if not person_records:
-        raise ValueError("❌ ERROR: Missing environment variable PERSON_RECORDS. Please set it in your .env file.")
+        raise ValueError("❌ ERROR: Missing environment variable ADDRESS_RECORDS. Please set it in your .env file.")
     
     try:
         num_records = int(person_records)
     except ValueError as e:
-        raise ValueError(f"❌ ERROR: Invalid integer value in PERSON_RECORDS: {e}")
+        raise ValueError(f"❌ ERROR: Invalid integer value in ADDRESS_RECORDS: {e}")
     
     if num_records <= 0:
-        raise ValueError("❌ ERROR: PERSON_RECORDS must be greater than 0.")
+        raise ValueError("❌ ERROR: ADDRESS_RECORDS must be greater than 0.")
     
     return num_records
 
@@ -260,10 +242,9 @@ def compare_performance(test_records=100000):
     start_time = time.time()
     
     test_output = 'src/data/output/neptune/nodes/performance_test_sequential.csv'
-    column_order = ['~id', 'node_id:String', 'node_name:String', 'name_full:String', 
-                   'date_of_birth:Date', 'anumber_primary:String', '~label']
+    column_order = ['~id', '~label']
     
-    records_written, _ = stream_to_csv_optimized(test_records, test_output, column_order)
+    records_written, _ = stream_to_csv(test_records, test_output, column_order)
     sequential_time = time.time() - start_time
     sequential_rate = records_written / sequential_time
     
@@ -299,7 +280,7 @@ def compare_performance(test_records=100000):
     return speedup, rate_improvement
 
 def main():
-    """Main function to generate mock person data using parallel streaming approach"""
+    """Main function to generate mock address data using parallel streaming approach"""
     
     # Find and load .env file
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -337,13 +318,12 @@ def main():
         
         for file_num in range(num_files):
             records_this_file = min(optimal_records, num_records - total_generated)
-            output_path = f'src/data/output/neptune/nodes/neptune_person_nodes_gremlin_{file_num + 1:05d}.csv'
+            output_path = f'src/data/output/neptune/nodes/neptune_address_nodes_gremlin_{file_num + 1:05d}.csv'
             
             print(f"\n🚀 Parallel streaming file {file_num + 1}/{num_files}: {records_this_file:,} records")
             
             # Define CSV column order
-            column_order = ['~id', 'node_id:String', 'node_name:String', 'name_full:String', 
-                           'date_of_birth:Date', 'anumber_primary:String', '~label']
+            column_order = ['~id', '~label']
             
             # Use parallel processing for 5x speed improvement
             records_written, file_size = stream_to_csv_parallel(records_this_file, output_path, column_order)
@@ -356,20 +336,19 @@ def main():
                 print(f"⚠️  File size limit reached, stopping at {records_written:,} records")
                 break
         
-        print(f"\n✅ Successfully generated {total_generated:,} person nodes in {num_files} files using parallel streaming.")
+        print(f"\n✅ Successfully generated {total_generated:,} address nodes in {num_files} files using parallel streaming.")
         print(f"📁 Total output size: {total_file_size / (1024**3):.2f} GB")
         print(f"📁 Largest file size: {max_file_size / (1024**3):.2f} GB")
         
     else:
         # Single file approach
-        output_path = 'src/data/output/neptune/nodes/neptune_person_nodes_gremlin_00001.csv'
-        column_order = ['~id', 'node_id:String', 'node_name:String', 'name_full:String', 
-                       'date_of_birth:Date', 'anumber_primary:String', '~label']
+        output_path = 'src/data/output/neptune/nodes/neptune_address_nodes_gremlin_00001.csv'
+        column_order = ['~id','~label']
         
         print(f"\n🚀 Parallel streaming all {num_records:,} records to single file...")
         records_written, file_size = stream_to_csv_parallel(num_records, output_path, column_order)
         
-        print(f"\n✅ Successfully generated {records_written:,} person nodes using parallel streaming.")
+        print(f"\n✅ Successfully generated {records_written:,} address nodes using parallel streaming.")
         print(f"📁 File size: {file_size / (1024**3):.2f} GB")
         
         # Set max_file_size for single file case
