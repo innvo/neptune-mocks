@@ -16,8 +16,8 @@ def convert_to_gremlin():
         # Define all possible anumber columns with their types
         all_columns = {
             '~id': 'String',
-            'node_id': 'String',  # Remove type suffix for node_id
-            'node_name': 'String',  # Remove type suffix for node_name
+            'node_id:String': 'String',  # Add type suffix for node_id
+            'node_name:String': 'String',  # Add type suffix for node_name
             'anumber:String': 'String',
             'anumber_type:String': 'String',
             'issue_date:String': 'String',
@@ -36,8 +36,8 @@ def convert_to_gremlin():
             # Create the node with required fields
             node = {
                 '~id': anumber['node_id'],
-                'node_id': anumber['node_id'],  # Set node_id to the same value as ~id
-                'node_name': anumber['node_name']  # Use the node_name from the JSON
+                'node_id:String': anumber['node_id'],  # Set node_id to the same value as ~id
+                'node_name:String': anumber['node_name']  # Use the node_name from the JSON
             }
             
             # Add all properties from the JSON with appropriate type suffixes
@@ -72,9 +72,9 @@ def convert_to_gremlin():
         
         # Ensure node_id and node_name come right after ~id
         ordered_cols.remove('~id')
-        ordered_cols.remove('node_id')
-        ordered_cols.remove('node_name')
-        ordered_cols = ['~id', 'node_id', 'node_name'] + [col for col in ordered_cols if col not in ['~id', 'node_id', 'node_name', '~label']] + ['~label']
+        ordered_cols.remove('node_id:String')
+        ordered_cols.remove('node_name:String')
+        ordered_cols = ['~id', 'node_id:String', 'node_name:String'] + [col for col in ordered_cols if col not in ['~id', 'node_id:String', 'node_name:String', '~label']] + ['~label']
         
         # Reorder the DataFrame columns
         nodes_df = nodes_df[ordered_cols]
