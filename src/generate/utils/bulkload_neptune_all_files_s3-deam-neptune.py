@@ -9,6 +9,9 @@ import sys
 import urllib3
 import warnings
 from urllib3.exceptions import InsecureRequestWarning
+import concurrent.futures
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Suppress SSL warnings for localhost development
 urllib3.disable_warnings(InsecureRequestWarning)
@@ -60,9 +63,10 @@ def print_progress(current: int, total: int, prefix: str = '', suffix: str = '')
     sys.stdout.flush()
 
 class NeptuneBulkLoader:
-    def __init__(self, neptune_endpoint: str = "https://localhost:8182"):
+    def __init__(self, neptune_endpoint: str = "https://localhost:8182", max_workers: int = 10):
         self.neptune_endpoint = neptune_endpoint
         self.s3_client = boto3.client('s3')
+        self.max_workers = max_workers  # Number of concurrent job submissions
         
         # Configure requests session for better SSL handling
         self.session = requests.Session()
@@ -72,7 +76,7 @@ class NeptuneBulkLoader:
         else:
             logger.info(f"SSL verification enabled for endpoint: {neptune_endpoint}")
             
-        logger.info(f"Initialized NeptuneBulkLoader with endpoint: {neptune_endpoint}")
+        logger.info(f"Initialized NeptuneBulkLoader with endpoint: {neptune_endpoint}, max_workers: {max_workers}")
         
     def get_files_from_s3(self, bucket_name: str) -> List[Dict]:
         """Get list of CSV files from S3 bucket, separated into nodes and edges."""
@@ -142,8 +146,8 @@ class NeptuneBulkLoader:
                 
         return False
             
-    def submit_load_job(self, file_info: Dict) -> str:
-        """Submit a load job to Neptune bulk loader."""
+    def submit_load_job(self, file_info: Dict) -> Dict:
+        """Submit a load job to Neptune bulk loader with optimized settings."""
         try:
             payload = {
                 "source": file_info['source'],
@@ -151,15 +155,23 @@ class NeptuneBulkLoader:
                 "iamRoleArn": "arn:aws:iam::244081531951:role/NeptuneLoadFromS3",
                 "region": "us-east-1",
                 "failOnError": "TRUE",
-                "parallelism": "MEDIUM",
+                "parallelism": "HIGH",  # Changed from MEDIUM to HIGH for maximum speed
                 "updateSingleCardinalityProperties": "FALSE",
-                "queueRequest": "TRUE"
+                "queueRequest": "TRUE",
+                "parserConfiguration": {
+                    "namedGraphUri": "",
+                    "baseUri": "",
+                    "allowEmptyStrings": "FALSE",
+                    "allowMultipleVertexLabels": "TRUE",
+                    "allowEmptyStringsWithoutQuotes": "FALSE",
+                    "trimStrings": "TRUE"
+                }
             }
             
             response = self.session.post(
                 f"{self.neptune_endpoint}/loader",
                 json=payload,
-                timeout=30
+                timeout=60  # Increased timeout for larger files
             )
             response.raise_for_status()
             
@@ -168,16 +180,56 @@ class NeptuneBulkLoader:
             if not load_id:
                 raise ValueError("No load ID returned from Neptune")
                 
-            return load_id
+            return {
+                'file_key': file_info['key'],
+                'load_id': load_id,
+                'status': 'SUBMITTED',
+                'type': 'NODE' if not self._is_edge_file(file_info['key']) else 'EDGE',
+                'size': file_info.get('size', 0)
+            }
             
         except Exception as e:
-            print(f"Error submitting load job for {file_info.get('key', 'unknown')}: {str(e)}")
-            raise
-            
+            return {
+                'file_key': file_info['key'],
+                'load_id': 'FAILED',
+                'status': f'ERROR: {str(e)}',
+                'type': 'NODE' if not self._is_edge_file(file_info['key']) else 'EDGE',
+                'size': file_info.get('size', 0)
+            }
 
+    def submit_jobs_concurrent(self, files: List[Dict], job_type: str) -> List[Dict]:
+        """Submit multiple jobs concurrently using ThreadPoolExecutor."""
+        job_results = []
+        
+        print(f"\n{Fore.BLUE}Submitting {len(files)} {job_type} files concurrently (max {self.max_workers} workers)...{Style.RESET_ALL}")
+        
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            # Submit all jobs
+            future_to_file = {executor.submit(self.submit_load_job, file_info): file_info for file_info in files}
+            
+            # Process completed jobs
+            completed = 0
+            for future in as_completed(future_to_file):
+                completed += 1
+                result = future.result()
+                job_results.append(result)
+                
+                # Update progress
+                print_progress(completed, len(files), 
+                             prefix=f'{job_type}:', 
+                             suffix=f'({completed}/{len(files)}) - {result["file_key"]}')
+                
+                # Print immediate status
+                if result['status'] == 'SUBMITTED':
+                    print(f"\n{Fore.GREEN}✓{Style.RESET_ALL} {result['file_key']} - {result['load_id']}")
+                else:
+                    print(f"\n{Fore.RED}✗{Style.RESET_ALL} {result['file_key']} - {result['status']}")
+        
+        print()  # New line after progress bar
+        return job_results
             
     def load_all_files(self, bucket_name: str):
-        """Load all files from S3 bucket into Neptune - nodes first, then edges."""
+        """Load all files from S3 bucket into Neptune - nodes first, then edges with concurrent processing."""
         start_time = datetime.now()
         
         try:
@@ -189,74 +241,47 @@ class NeptuneBulkLoader:
                 return
                 
             total_files = len(node_files) + len(edge_files)
+            total_size = sum(f.get('size', 0) for f in node_files + edge_files)
+            
             print(f"Found {len(node_files)} node files and {len(edge_files)} edge files to submit")
+            print(f"Total data size: {total_size / (1024*1024*1024):.2f} GB")
+            print(f"Using {self.max_workers} concurrent workers for job submission")
             
-            job_results = []  # List of {file_key, load_id, status, type}
+            job_results = []
             
-            # Load nodes first
+            # Load nodes first (concurrently)
             if node_files:
-                print(f"\n{Fore.BLUE}Loading {len(node_files)} node files...{Style.RESET_ALL}")
-                for i, file_info in enumerate(node_files, 1):
-                    print_progress(i, len(node_files), prefix='Nodes:', suffix=f'({i}/{len(node_files)})')
-                    try:
-                        load_id = self.submit_load_job(file_info)
-                        job_results.append({
-                            'file_key': file_info['key'],
-                            'load_id': load_id,
-                            'status': 'SUBMITTED',
-                            'type': 'NODE'
-                        })
-                    except Exception as e:
-                        job_results.append({
-                            'file_key': file_info['key'],
-                            'load_id': 'FAILED',
-                            'status': f'ERROR: {str(e)}',
-                            'type': 'NODE'
-                        })
-                print()  # New line after progress bar
+                node_results = self.submit_jobs_concurrent(node_files, "NODE")
+                job_results.extend(node_results)
             
-            # Load edges second
+            # Load edges second (concurrently)
             if edge_files:
-                print(f"\n{Fore.BLUE}Loading {len(edge_files)} edge files...{Style.RESET_ALL}")
-                for i, file_info in enumerate(edge_files, 1):
-                    print_progress(i, len(edge_files), prefix='Edges:', suffix=f'({i}/{len(edge_files)})')
-                    try:
-                        load_id = self.submit_load_job(file_info)
-                        job_results.append({
-                            'file_key': file_info['key'],
-                            'load_id': load_id,
-                            'status': 'SUBMITTED',
-                            'type': 'EDGE'
-                        })
-                    except Exception as e:
-                        job_results.append({
-                            'file_key': file_info['key'],
-                            'load_id': 'FAILED',
-                            'status': f'ERROR: {str(e)}',
-                            'type': 'EDGE'
-                        })
-                print()  # New line after progress bar
+                edge_results = self.submit_jobs_concurrent(edge_files, "EDGE")
+                job_results.extend(edge_results)
             
             # Print final report
             print_header("Job Submission Report")
             print(f"{Fore.CYAN}Total Files Found:{Style.RESET_ALL} {total_files}")
+            print(f"{Fore.CYAN}Total Data Size:{Style.RESET_ALL} {total_size / (1024*1024*1024):.2f} GB")
             print(f"{Fore.CYAN}Node Files:{Style.RESET_ALL} {len(node_files)}")
             print(f"{Fore.CYAN}Edge Files:{Style.RESET_ALL} {len(edge_files)}")
             print(f"{Fore.CYAN}Jobs Submitted Successfully:{Style.RESET_ALL} {len([j for j in job_results if j['status'] == 'SUBMITTED'])}")
             print(f"{Fore.CYAN}Jobs Failed:{Style.RESET_ALL} {len([j for j in job_results if j['status'] != 'SUBMITTED'])}")
             print(f"{Fore.CYAN}Submission Time:{Style.RESET_ALL} {datetime.now() - start_time}")
+            print(f"{Fore.CYAN}Concurrent Workers Used:{Style.RESET_ALL} {self.max_workers}")
             
             # Print all jobs in submission order
             print(f"\n{Fore.CYAN}Job Details (in submission order):{Style.RESET_ALL}")
-            print(f"{'Type':<6} {'File':<50} {'Job ID':<40} {'Status'}")
-            print("-" * 106)
+            print(f"{'Type':<6} {'File':<50} {'Job ID':<40} {'Size (MB)':<10} {'Status'}")
+            print("-" * 116)
             
             for job in job_results:
                 job_type = job['type']
+                size_mb = job.get('size', 0) / (1024*1024)
                 if job['status'] == 'SUBMITTED':
-                    print(f"{job_type:<6} {job['file_key']:<50} {job['load_id']:<40} {Fore.GREEN}SUBMITTED{Style.RESET_ALL}")
+                    print(f"{job_type:<6} {job['file_key']:<50} {job['load_id']:<40} {size_mb:<10.1f} {Fore.GREEN}SUBMITTED{Style.RESET_ALL}")
                 else:
-                    print(f"{job_type:<6} {job['file_key']:<50} {'FAILED':<40} {Fore.RED}{job['status']}{Style.RESET_ALL}")
+                    print(f"{job_type:<6} {job['file_key']:<50} {'FAILED':<40} {size_mb:<10.1f} {Fore.RED}{job['status']}{Style.RESET_ALL}")
             
         except Exception as e:
             print(f"Script failed: {str(e)}")
@@ -266,9 +291,10 @@ if __name__ == "__main__":
     # Configuration
     S3_BUCKET = "deam-neptune"
     NEPTUNE_ENDPOINT = "https://localhost:8182"
+    MAX_WORKERS = 10  # Adjust based on your Neptune cluster capacity
     
     try:
-        loader = NeptuneBulkLoader(NEPTUNE_ENDPOINT)
+        loader = NeptuneBulkLoader(NEPTUNE_ENDPOINT, MAX_WORKERS)
         loader.load_all_files(S3_BUCKET)
     except KeyboardInterrupt:
         print("Process interrupted by user")
