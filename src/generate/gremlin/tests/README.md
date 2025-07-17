@@ -1,3 +1,18 @@
+curl -k -X POST \
+  -H "Content-Type: application/json" \
+  "https://localhost:8182/loader" \
+  -d '{
+    "source": "s3://deam-neptune/",
+    "format": "csv",
+    "iamRoleArn": "arn:aws:iam::244081531951:role/NeptuneLoadFromS3 \",
+    "region": "us-east-1",
+    "failOnError": "FALSE",
+    "parallelism": "OVERSUBSCRIBE",
+    "queueRequest": "TRUE"
+  }'
+
+
+
 # Basic bulk load concurrency test
 python neptune_bulk_load_test.py \
   your-cluster.cluster-xxx.us-east-1.neptune.amazonaws.com \

@@ -231,9 +231,9 @@ class NeptuneBulkLoadTester:
             
             # Create CSV content
             with open(local_path, 'w') as f:
-                f.write("~id,name,age,city\n")  # Neptune CSV format
+                f.write("~id,~label,name,age,city\n")  # Neptune CSV format with ~label
                 for j in range(records_per_file):
-                    f.write(f"person_{i}_{j},Person {i}-{j},{20 + (j % 50)},City{j % 10}\n")
+                    f.write(f"person_{i}_{j},test,Person {i}-{j},{20 + (j % 50)},City{j % 10}\n")
             
             # Upload to S3
             try:
