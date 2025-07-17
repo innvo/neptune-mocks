@@ -15,6 +15,7 @@ Features:
 - Real-time load status monitoring
 - Optimized file ordering by size and type
 - Comprehensive error handling and recovery
+- Support for both CSV and GZ (gzipped CSV) files
 
 Environment Variables:
 - NEPTUNE_ENDPOINT: Neptune cluster endpoint (default: https://localhost:8182)
@@ -24,13 +25,17 @@ Environment Variables:
 - S3_PREFIX: S3 prefix/subdirectory to load files from (default: root of bucket)
 - S3_EXCLUDE_PATTERNS: Comma-separated patterns to exclude (default: archive/,backup/,old/,temp/,tmp/)
 - NEPTUNE_CONCURRENT_LIMIT: Override detected concurrent limit (default: auto-detect)
-- NEPTUNE_QUEUE_WAIT_TIME: Time to wait between queue checks in seconds (default: 10)
-- NEPTUNE_MAX_RETRY_ATTEMPTS: Maximum retry attempts for failed loads (default: 3)
-- NEPTUNE_BACKOFF_MULTIPLIER: Exponential backoff multiplier (default: 2.0)
-- NEPTUNE_INITIAL_BACKOFF: Initial backoff time in seconds (default: 30)
-- NEPTUNE_MAX_BACKOFF: Maximum backoff time in seconds (default: 300)
-- NEPTUNE_HEALTH_CHECK_INTERVAL: Health check interval in seconds (default: 30)
+- NEPTUNE_QUEUE_WAIT_TIME: Time to wait between queue checks in seconds (default: 5)
+- NEPTUNE_MAX_RETRY_ATTEMPTS: Maximum retry attempts for failed loads (default: 2)
+- NEPTUNE_BACKOFF_MULTIPLIER: Exponential backoff multiplier (default: 1.5)
+- NEPTUNE_INITIAL_BACKOFF: Initial backoff time in seconds (default: 15)
+- NEPTUNE_MAX_BACKOFF: Maximum backoff time in seconds (default: 120)
+- NEPTUNE_HEALTH_CHECK_INTERVAL: Health check interval in seconds (default: 15)
 - NEPTUNE_DEBUG: Enable debug logging (default: false)
+
+Performance Modes:
+- NEPTUNE_PERFORMANCE_MODE=true: Enable high-performance mode (faster retries, shorter waits)
+- NEPTUNE_ULTRA_MODE=true: Enable ultra-performance mode (maximum speed, use with caution)
 """
 
 import boto3
@@ -249,20 +254,18 @@ class ConcurrentLoadManager:
                 detected_limit = len(active_loads) + 1
                 self.logger.info(f"Detected minimum concurrent limit: {detected_limit}")
             else:
-                # More aggressive default - try higher limits for better performance
-                # Most Neptune clusters support at least 2-4 concurrent loads
-                detected_limit = 4
-                self.logger.info("No active loads found, defaulting to concurrent limit of 4 for better performance")
+                # Default to 1 for safety - most Neptune clusters have limit=1
+                detected_limit = 1
+                self.logger.info("No active loads found, defaulting to concurrent limit of 1")
             
             self.concurrent_limit = detected_limit
             return detected_limit
             
         except Exception as e:
             self.logger.warning(f"Could not detect concurrent limit: {e}")
-            # More aggressive fallback for better performance
-            self.logger.info("Defaulting to concurrent limit of 4 for better performance")
-            self.concurrent_limit = 4
-            return 4
+            self.logger.info("Defaulting to concurrent limit of 1 for safety")
+            self.concurrent_limit = 1
+            return 1
     
     def _get_active_loads(self) -> List[Dict]:
         """Get list of currently active loads."""
@@ -301,7 +304,11 @@ class ConcurrentLoadManager:
         return []
     
     def get_files_from_s3(self) -> Tuple[List[Dict], List[Dict]]:
-        """Get list of CSV files from S3 bucket, separated into nodes and edges."""
+        """Get list of CSV and GZ files from S3 bucket, separated into nodes and edges.
+        
+        Note: Neptune bulk loader automatically detects compression from file extensions.
+        Both .csv and .gz files use the 'csv' format parameter.
+        """
         try:
             if self.config.s3_prefix:
                 location = f"s3://{self.config.s3_bucket}/{self.config.s3_prefix}"
@@ -324,17 +331,22 @@ class ConcurrentLoadManager:
             for obj in response['Contents']:
                 file_key = obj['Key']
                 
-                # Skip non-CSV files
-                if not file_key.lower().endswith('.csv'):
+                # Skip non-CSV and non-GZ files
+                if not (file_key.lower().endswith('.csv') or file_key.lower().endswith('.gz')):
                     continue
                 
                 # Skip excluded files
                 if any(pattern in file_key.lower() for pattern in exclude_patterns):
                     continue
                 
+                # Determine file format based on extension
+                # Neptune bulk loader uses 'csv' format for both .csv and .gz files
+                # The compression is automatically detected from the file extension
+                format_type = 'csv'
+                
                 file_info = {
                     'source': f"s3://{self.config.s3_bucket}/{file_key}",
-                    'format': 'csv',
+                    'format': format_type,
                     'size': obj['Size'],
                     'last_modified': obj['LastModified'],
                     'key': file_key
@@ -354,7 +366,11 @@ class ConcurrentLoadManager:
             raise
     
     def _is_edge_file(self, file_key: str) -> bool:
-        """Determine if a file is an edge file based on filename patterns."""
+        """Determine if a file is an edge file based on filename patterns.
+        
+        Works with both .csv and .gz files - the pattern matching is done on the base filename
+        before the extension is considered.
+        """
         edge_patterns = [
             'edge', 'relationship', 'link', 'connection',
             'person_address', 'person_organization', 'person_email',
@@ -399,7 +415,7 @@ class ConcurrentLoadManager:
         """Build curl command for a load job."""
         payload = {
             "source": job.source,
-            "format": "csv",
+            "format": job.file_info['format'],  # Use the format from file_info (csv or csv-gzip)
             "iamRoleArn": self.config.iam_role_arn,
             "region": self.config.region,
             "failOnError": "TRUE" if self.config.fail_on_error else "FALSE",
@@ -763,6 +779,10 @@ def main():
         print(f"  Parallelism: {config.parallelism}")
         print(f"  Max Retry Attempts: {config.max_retry_attempts}")
         print(f"  Queue Wait Time: {config.queue_wait_time}s")
+        print(f"  Timeout: {config.timeout}s")
+        print(f"  Connect Timeout: {config.connect_timeout}s")
+        print(f"  Fail on Error: {config.fail_on_error}")
+        print(f"  Queue Request: {config.queue_request}")
         print()
         
         # Create and run concurrent load manager

@@ -38,6 +38,7 @@ src/data/input/**
 src/data/output/**
 src/neptune-performance-test/csv_output/**
 *.log
+*.json
 
 # OS specific
 .DS_Store
@@ -45,3 +46,4 @@ Thumbs.db
 
 .env
 .env
+neptune_bulk_load_results_1752778299.json
