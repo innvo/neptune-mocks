@@ -447,7 +447,7 @@ async def main():
     parser.add_argument("-k", "--insecure", action="store_true", 
                        help="Disable SSL certificate verification (equivalent to curl -k)")
     parser.add_argument("--port", type=int, default=8182, help="Neptune port (default: 8182)")
-    parser.add_argument("--max-concurrency", type=int, default=50, help="Maximum concurrency level to test")
+    parser.add_argument("--max-concurrency", type=int, default=15, help="Maximum concurrency level to test")
     parser.add_argument("--step", type=int, default=5, help="Concurrency step size")
     parser.add_argument("--parallelism", choices=["LOW", "MEDIUM", "HIGH", "OVERSUBSCRIBE"], 
                        default="MEDIUM", help="Bulk load parallelism setting")
