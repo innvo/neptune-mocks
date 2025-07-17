@@ -1,36 +1,35 @@
 #!/usr/bin/env python3
 """
-Neptune Bulk Loader - Curl Command Executor
+Neptune Bulk Loader - Concurrent Load Manager
 
-This script executes curl commands to bulk load all CSV files from s3://deam-neptune/
-into Neptune. It automatically discovers files in the S3 bucket and submits them
-for loading using the Neptune bulk loader API.
+This script intelligently manages concurrent loads for Neptune clusters by:
+1. Detecting the cluster's concurrent load limit
+2. Automatically managing job queues to respect limits
+3. Providing intelligent retry logic for concurrent limit errors
+4. Optimizing load order and timing
 
 Features:
-- Automatic file discovery in S3 bucket
-- Separate handling of node and edge files
-- Concurrent job submission with progress tracking
-- Comprehensive error handling and logging
-- Configurable timeouts and retry logic
-- Support for both localhost and production endpoints
+- Automatic concurrent load limit detection
+- Smart queue management with load balancing
+- Intelligent retry logic with backoff
+- Real-time load status monitoring
+- Optimized file ordering by size and type
+- Comprehensive error handling and recovery
 
 Environment Variables:
 - NEPTUNE_ENDPOINT: Neptune cluster endpoint (default: https://localhost:8182)
 - NEPTUNE_IAM_ROLE_ARN: IAM role ARN for S3 access (required)
 - AWS_REGION: AWS region (default: us-east-1)
 - S3_BUCKET: S3 bucket name (default: deam-neptune)
-- NEPTUNE_MAX_WORKERS: Maximum concurrent workers (default: 10 - high performance)
-- NEPTUNE_USE_SEQUENTIAL: Use sequential submission to respect Neptune's concurrent load limits (default: true)
-- NEPTUNE_WAIT_FOR_COMPLETION: Wait for each load to complete before submitting next file (default: true)
-- NEPTUNE_PERFORMANCE_MODE: Enable legacy performance mode (default: false - high performance is now default)
-- NEPTUNE_ULTRA_MODE: Enable ultra-performance mode for Neptune clusters with high concurrent limits (default: false)
-- NEPTUNE_TIMEOUT: Request timeout in seconds (default: 1800 - 30 minutes)
-- NEPTUNE_CONNECT_TIMEOUT: Connection timeout in seconds (default: 60 - 1 minute)
-- NEPTUNE_RETRY_ATTEMPTS: Number of retry attempts (default: 1 - minimal for speed)
-- NEPTUNE_RETRY_DELAY: Delay between retries in seconds (default: 2 - short for speed)
-- NEPTUNE_PARALLELISM: Neptune loader parallelism (default: OVERSUBSCRIBE - maximum)
-- NEPTUNE_FAIL_ON_ERROR: Whether to fail on errors (default: false - continue on errors)
-- NEPTUNE_QUEUE_REQUEST: Whether to queue requests (default: false - immediate submission)
+- S3_PREFIX: S3 prefix/subdirectory to load files from (default: root of bucket)
+- S3_EXCLUDE_PATTERNS: Comma-separated patterns to exclude (default: archive/,backup/,old/,temp/,tmp/)
+- NEPTUNE_CONCURRENT_LIMIT: Override detected concurrent limit (default: auto-detect)
+- NEPTUNE_QUEUE_WAIT_TIME: Time to wait between queue checks in seconds (default: 10)
+- NEPTUNE_MAX_RETRY_ATTEMPTS: Maximum retry attempts for failed loads (default: 3)
+- NEPTUNE_BACKOFF_MULTIPLIER: Exponential backoff multiplier (default: 2.0)
+- NEPTUNE_INITIAL_BACKOFF: Initial backoff time in seconds (default: 30)
+- NEPTUNE_MAX_BACKOFF: Maximum backoff time in seconds (default: 300)
+- NEPTUNE_HEALTH_CHECK_INTERVAL: Health check interval in seconds (default: 30)
 - NEPTUNE_DEBUG: Enable debug logging (default: false)
 """
 
@@ -41,96 +40,108 @@ import logging
 import os
 import sys
 import time
-from typing import Dict, List, Tuple
-from datetime import datetime
-from dataclasses import dataclass
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
+from typing import Dict, List, Tuple, Optional, Set
+from datetime import datetime, timedelta
+from dataclasses import dataclass, field
+from concurrent.futures import ThreadPoolExecutor, as_completed, Future
 import traceback
 from colorama import init, Fore, Style
+from queue import Queue, Empty
+from enum import Enum
+import random
 
 # Initialize colorama for colored output
 init()
 
+class LoadStatus(Enum):
+    """Load job status enumeration."""
+    PENDING = "PENDING"
+    SUBMITTED = "SUBMITTED"
+    IN_PROGRESS = "LOAD_IN_PROGRESS"
+    COMPLETED = "LOAD_COMPLETED"
+    FAILED = "LOAD_FAILED"
+    CANCELLED = "LOAD_CANCELLED"
+    RETRY_REQUIRED = "RETRY_REQUIRED"
+    CONCURRENT_LIMIT_EXCEEDED = "CONCURRENT_LIMIT_EXCEEDED"
+
 @dataclass
-class NeptuneConfig:
-    """Configuration for Neptune bulk loader."""
+class LoadJob:
+    """Represents a single load job."""
+    file_info: Dict
+    file_key: str
+    source: str
+    size: int
+    job_type: str  # 'NODE' or 'EDGE'
+    status: LoadStatus = LoadStatus.PENDING
+    load_id: Optional[str] = None
+    submission_time: Optional[datetime] = None
+    completion_time: Optional[datetime] = None
+    retry_count: int = 0
+    last_error: Optional[str] = None
+    priority: int = 0  # Higher priority = processed first
+    
+    def __post_init__(self):
+        """Calculate priority based on file characteristics."""
+        # Prioritize smaller files and nodes over edges
+        size_priority = max(0, 100 - (self.size // (1024 * 1024)))  # Smaller files first
+        type_priority = 50 if self.job_type == 'NODE' else 0  # Nodes first
+        self.priority = size_priority + type_priority
+
+@dataclass
+class ConcurrentLoadConfig:
+    """Configuration for concurrent load management."""
     endpoint: str = "https://localhost:8182"
     iam_role_arn: str = ""
     region: str = "us-east-1"
     s3_bucket: str = "deam-neptune"
-    max_workers: int = 5
-    parallelism: str = "HIGH"
-    fail_on_error: bool = True
-    queue_request: bool = True
-    timeout: int = 300
-    connect_timeout: int = 30
-    retry_attempts: int = 3
-    retry_delay: int = 5
+    s3_prefix: str = ""
+    s3_exclude_patterns: str = "archive/,backup/,old/,temp/,tmp/"
+    
+    # Concurrent load management
+    concurrent_limit: Optional[int] = None  # Auto-detect if None
+    queue_wait_time: int = 10
+    max_retry_attempts: int = 3
+    backoff_multiplier: float = 2.0
+    initial_backoff: int = 30
+    max_backoff: int = 300
+    health_check_interval: int = 30
+    
+    # Neptune settings
+    parallelism: str = "OVERSUBSCRIBE"
+    fail_on_error: bool = False
+    queue_request: bool = False
+    timeout: int = 1800
+    connect_timeout: int = 60
     debug_mode: bool = False
-    use_sequential: bool = True  # Default to sequential to respect Neptune's concurrent load limits
-    wait_for_completion: bool = True  # Default to waiting for each load to complete before next submission
     
     @classmethod
-    def from_env(cls) -> 'NeptuneConfig':
+    def from_env(cls) -> 'ConcurrentLoadConfig':
         """Create configuration from environment variables."""
+        concurrent_limit = os.getenv('NEPTUNE_CONCURRENT_LIMIT')
+        if concurrent_limit:
+            concurrent_limit = int(concurrent_limit)
+            
         return cls(
             endpoint=os.getenv('NEPTUNE_ENDPOINT', cls.endpoint),
             iam_role_arn=os.getenv('NEPTUNE_IAM_ROLE_ARN', cls.iam_role_arn),
             region=os.getenv('AWS_REGION', cls.region),
             s3_bucket=os.getenv('S3_BUCKET', cls.s3_bucket),
-            max_workers=int(os.getenv('NEPTUNE_MAX_WORKERS', 10)),  # Default to high performance
-            parallelism=os.getenv('NEPTUNE_PARALLELISM', 'OVERSUBSCRIBE'),  # Default to maximum parallelism
-            fail_on_error=os.getenv('NEPTUNE_FAIL_ON_ERROR', 'false').lower() == 'true',  # Default to not fail on errors
-            queue_request=os.getenv('NEPTUNE_QUEUE_REQUEST', 'false').lower() == 'true',  # Default to immediate submission
-            timeout=int(os.getenv('NEPTUNE_TIMEOUT', 1800)),  # Default to 30 minutes
-            connect_timeout=int(os.getenv('NEPTUNE_CONNECT_TIMEOUT', 60)),  # Default to 1 minute
-            retry_attempts=int(os.getenv('NEPTUNE_RETRY_ATTEMPTS', 1)),  # Default to minimal retries
-            retry_delay=int(os.getenv('NEPTUNE_RETRY_DELAY', 2)),  # Default to short retry delay
-            debug_mode=os.getenv('NEPTUNE_DEBUG', 'false').lower() == 'true',
-            use_sequential=os.getenv('NEPTUNE_USE_SEQUENTIAL', 'true').lower() == 'true',  # Keep sequential for Neptune clusters with limit=1
-            wait_for_completion=os.getenv('NEPTUNE_WAIT_FOR_COMPLETION', 'true').lower() == 'true'  # Wait for each load to complete
-        )
-    
-    @classmethod
-    def high_performance(cls) -> 'NeptuneConfig':
-        """Create a high-performance configuration optimized for speed."""
-        return cls(
-            endpoint=os.getenv('NEPTUNE_ENDPOINT', cls.endpoint),
-            iam_role_arn=os.getenv('NEPTUNE_IAM_ROLE_ARN', cls.iam_role_arn),
-            region=os.getenv('AWS_REGION', cls.region),
-            s3_bucket=os.getenv('S3_BUCKET', cls.s3_bucket),
-            max_workers=10,  # Increased workers for concurrent processing
-            parallelism="OVERSUBSCRIBE",  # Maximum parallelism
-            fail_on_error=False,  # Don't fail on individual errors
-            queue_request=False,  # Don't queue, submit immediately
-            timeout=1800,  # 30 minutes for large files
-            connect_timeout=60,  # 1 minute connection timeout
-            retry_attempts=1,  # Minimal retries for speed
-            retry_delay=2,  # Short retry delay
-            debug_mode=False,  # Disable debug for performance
-            use_sequential=True,  # Use sequential for Neptune clusters with limit=1
-            wait_for_completion=True  # Wait for each load to complete
-        )
-    
-    @classmethod
-    def ultra_performance(cls) -> 'NeptuneConfig':
-        """Create an ultra-performance configuration for Neptune clusters with higher concurrent limits."""
-        return cls(
-            endpoint=os.getenv('NEPTUNE_ENDPOINT', cls.endpoint),
-            iam_role_arn=os.getenv('NEPTUNE_IAM_ROLE_ARN', cls.iam_role_arn),
-            region=os.getenv('AWS_REGION', cls.region),
-            s3_bucket=os.getenv('S3_BUCKET', cls.s3_bucket),
-            max_workers=20,  # Maximum workers for concurrent processing
-            parallelism="OVERSUBSCRIBE",  # Maximum parallelism
-            fail_on_error=False,  # Don't fail on individual errors
-            queue_request=False,  # Don't queue, submit immediately
-            timeout=3600,  # 1 hour for very large files
-            connect_timeout=120,  # 2 minute connection timeout
-            retry_attempts=1,  # Minimal retries for speed
-            retry_delay=1,  # Minimal retry delay
-            debug_mode=False,  # Disable debug for performance
-            use_sequential=False,  # Use concurrent processing
-            wait_for_completion=False  # Don't wait for completion in ultra mode
+            s3_prefix=os.getenv('S3_PREFIX', cls.s3_prefix),
+            s3_exclude_patterns=os.getenv('S3_EXCLUDE_PATTERNS', cls.s3_exclude_patterns),
+            concurrent_limit=concurrent_limit,
+            queue_wait_time=int(os.getenv('NEPTUNE_QUEUE_WAIT_TIME', cls.queue_wait_time)),
+            max_retry_attempts=int(os.getenv('NEPTUNE_MAX_RETRY_ATTEMPTS', cls.max_retry_attempts)),
+            backoff_multiplier=float(os.getenv('NEPTUNE_BACKOFF_MULTIPLIER', cls.backoff_multiplier)),
+            initial_backoff=int(os.getenv('NEPTUNE_INITIAL_BACKOFF', cls.initial_backoff)),
+            max_backoff=int(os.getenv('NEPTUNE_MAX_BACKOFF', cls.max_backoff)),
+            health_check_interval=int(os.getenv('NEPTUNE_HEALTH_CHECK_INTERVAL', cls.health_check_interval)),
+            parallelism=os.getenv('NEPTUNE_PARALLELISM', cls.parallelism),
+            fail_on_error=os.getenv('NEPTUNE_FAIL_ON_ERROR', 'false').lower() == 'true',
+            queue_request=os.getenv('NEPTUNE_QUEUE_REQUEST', 'false').lower() == 'true',
+            timeout=int(os.getenv('NEPTUNE_TIMEOUT', cls.timeout)),
+            connect_timeout=int(os.getenv('NEPTUNE_CONNECT_TIMEOUT', cls.connect_timeout)),
+            debug_mode=os.getenv('NEPTUNE_DEBUG', 'false').lower() == 'true'
         )
     
     def validate(self) -> None:
@@ -141,71 +152,37 @@ class NeptuneConfig:
             raise ValueError("Neptune endpoint is required.")
         if not self.s3_bucket:
             raise ValueError("S3 bucket is required.")
-        if self.max_workers < 1:
-            raise ValueError("Max workers must be at least 1.")
-        if self.timeout < 30:
-            raise ValueError("Timeout must be at least 30 seconds.")
-        if self.connect_timeout < 10:
-            raise ValueError("Connect timeout must be at least 10 seconds.")
-        if self.retry_attempts < 0:
-            raise ValueError("Retry attempts must be non-negative.")
+
+class ConcurrentLoadManager:
+    """Manages concurrent loads for Neptune with intelligent queue management."""
     
-    def print_performance_info(self):
-        """Print performance configuration information."""
-        print(f"{Fore.CYAN}HIGH PERFORMANCE Configuration:{Style.RESET_ALL}")
-        print(f"  Submission Mode: {'Sequential' if self.use_sequential else 'Concurrent'}")
-        print(f"  Wait for Completion: {self.wait_for_completion}")
-        print(f"  Max Workers: {self.max_workers}")
-        print(f"  Parallelism: {self.parallelism}")
-        print(f"  Queue Requests: {self.queue_request}")
-        print(f"  Fail on Error: {self.fail_on_error}")
-        print(f"  Timeout: {self.timeout}s")
-        print(f"  Retry Attempts: {self.retry_attempts}")
-        print(f"  Retry Delay: {self.retry_delay}s")
-        
-        if self.use_sequential:
-            print(f"{Fore.YELLOW}  ⚠️  Sequential mode may be slow for large datasets{Style.RESET_ALL}")
-            print(f"  💡 Set NEPTUNE_ULTRA_MODE=true for maximum speed (if cluster supports >5 concurrent loads)")
-        else:
-            print(f"{Fore.GREEN}  ✅ Concurrent mode enabled for maximum performance{Style.RESET_ALL}")
-        
-        print(f"{Fore.GREEN}  🚀 HIGH PERFORMANCE MODE ENABLED{Style.RESET_ALL}")
-
-# Configure logging
-def setup_logging(debug_mode: bool = False):
-    """Setup logging configuration."""
-    level = logging.DEBUG if debug_mode else logging.INFO
-    logging.basicConfig(
-        level=level,
-        format='%(asctime)s - %(levelname)s - %(message)s',
-        datefmt='%H:%M:%S'
-    )
-    return logging.getLogger(__name__)
-
-def print_header(text: str):
-    """Print a formatted header."""
-    print(f"\n{Fore.BLUE}{'=' * 80}{Style.RESET_ALL}")
-    print(f"{Fore.BLUE}{text.center(80)}{Style.RESET_ALL}")
-    print(f"{Fore.BLUE}{'=' * 80}{Style.RESET_ALL}\n")
-
-def print_progress(current: int, total: int, prefix: str = '', suffix: str = ''):
-    """Print a progress bar."""
-    bar_length = 50
-    filled_length = int(round(bar_length * current / float(total)))
-    percents = round(100.0 * current / float(total), 1)
-    bar = '█' * filled_length + '░' * (bar_length - filled_length)
-    sys.stdout.write(f'\r{prefix} |{bar}| {percents}% {suffix}')
-    sys.stdout.flush()
-
-class NeptuneCurlBulkLoader:
-    """Neptune bulk loader using curl commands."""
-    
-    def __init__(self, config: NeptuneConfig):
+    def __init__(self, config: ConcurrentLoadConfig):
         self.config = config
         self.config.validate()
-        self.logger = setup_logging(config.debug_mode)
+        self.logger = self._setup_logging()
         
-        self.logger.info(f"Initializing NeptuneCurlBulkLoader with endpoint: {config.endpoint}")
+        # Concurrent load management
+        self.concurrent_limit = config.concurrent_limit
+        self.active_loads: Dict[str, LoadJob] = {}  # load_id -> LoadJob
+        self.pending_queue = Queue()
+        self.retry_queue = Queue()
+        self.completed_jobs: List[LoadJob] = []
+        self.failed_jobs: List[LoadJob] = []
+        
+        # Thread management
+        self.load_monitor_thread = None
+        self.queue_processor_thread = None
+        self.shutdown_event = threading.Event()
+        
+        # Statistics
+        self.stats = {
+            'total_jobs': 0,
+            'submitted': 0,
+            'completed': 0,
+            'failed': 0,
+            'retries': 0,
+            'concurrent_limit_hits': 0
+        }
         
         try:
             self.s3_client = boto3.client('s3')
@@ -214,53 +191,134 @@ class NeptuneCurlBulkLoader:
             self.logger.error(f"Failed to initialize S3 client: {e}")
             raise
     
-    def get_files_from_s3(self) -> Tuple[List[Dict], List[Dict]]:
-        """Get list of CSV files from S3 bucket, separated into nodes and edges.
+    def _setup_logging(self) -> logging.Logger:
+        """Setup logging configuration."""
+        level = logging.DEBUG if self.config.debug_mode else logging.INFO
+        logging.basicConfig(
+            level=level,
+            format='%(asctime)s - %(levelname)s - %(message)s',
+            datefmt='%H:%M:%S'
+        )
+        return logging.getLogger(__name__)
+    
+    def detect_concurrent_limit(self) -> int:
+        """Detect Neptune cluster's concurrent load limit by testing."""
+        if self.concurrent_limit:
+            self.logger.info(f"Using configured concurrent limit: {self.concurrent_limit}")
+            return self.concurrent_limit
         
-        Returns:
-            Tuple of (node_files, edge_files)
-        """
+        self.logger.info("Auto-detecting Neptune concurrent load limit...")
+        
+        # Try to get current active loads to understand the limit
         try:
-            self.logger.info(f"Listing objects in S3 bucket: {self.config.s3_bucket}")
+            active_loads = self._get_active_loads()
+            self.logger.info(f"Found {len(active_loads)} currently active loads")
             
-            response = self.s3_client.list_objects_v2(Bucket=self.config.s3_bucket)
+            # If there are already active loads, assume limit is at least that number + 1
+            if active_loads:
+                detected_limit = len(active_loads) + 1
+                self.logger.info(f"Detected minimum concurrent limit: {detected_limit}")
+            else:
+                # Default to 1 for safety - most Neptune clusters have limit=1
+                detected_limit = 1
+                self.logger.info("No active loads found, defaulting to concurrent limit of 1")
+            
+            self.concurrent_limit = detected_limit
+            return detected_limit
+            
+        except Exception as e:
+            self.logger.warning(f"Could not detect concurrent limit: {e}")
+            self.logger.info("Defaulting to concurrent limit of 1 for safety")
+            self.concurrent_limit = 1
+            return 1
+    
+    def _get_active_loads(self) -> List[Dict]:
+        """Get list of currently active loads."""
+        try:
+            curl_cmd = [
+                'curl', '-X', 'GET',
+                f'{self.config.endpoint}/loader',
+                '--connect-timeout', str(self.config.connect_timeout),
+                '--max-time', str(self.config.timeout),
+                '-k', '-s'
+            ]
+            
+            result = subprocess.run(curl_cmd, capture_output=True, text=True, timeout=self.config.timeout)
+            
+            if result.returncode == 0:
+                response_data = json.loads(result.stdout)
+                # Handle different response formats
+                if 'payload' in response_data:
+                    loads = response_data['payload'].get('loadIds', [])
+                else:
+                    loads = response_data.get('loadIds', [])
+                
+                # Filter for active loads
+                active_loads = []
+                for load_info in loads:
+                    if isinstance(load_info, dict):
+                        status = load_info.get('status', '')
+                        if status in ['LOAD_IN_PROGRESS', 'LOAD_QUEUED']:
+                            active_loads.append(load_info)
+                
+                return active_loads
+            
+        except Exception as e:
+            self.logger.debug(f"Error getting active loads: {e}")
+        
+        return []
+    
+    def get_files_from_s3(self) -> Tuple[List[Dict], List[Dict]]:
+        """Get list of CSV files from S3 bucket, separated into nodes and edges."""
+        try:
+            if self.config.s3_prefix:
+                location = f"s3://{self.config.s3_bucket}/{self.config.s3_prefix}"
+                response = self.s3_client.list_objects_v2(
+                    Bucket=self.config.s3_bucket, 
+                    Prefix=self.config.s3_prefix
+                )
+            else:
+                location = f"s3://{self.config.s3_bucket}"
+                response = self.s3_client.list_objects_v2(Bucket=self.config.s3_bucket)
             
             if 'Contents' not in response:
-                self.logger.warning(f"No files found in bucket {self.config.s3_bucket}")
+                self.logger.warning(f"No files found in {location}")
                 return [], []
-                
+            
             node_files = []
             edge_files = []
+            exclude_patterns = [p.strip() for p in self.config.s3_exclude_patterns.split(',') if p.strip()]
             
             for obj in response['Contents']:
                 file_key = obj['Key']
+                
                 # Skip non-CSV files
                 if not file_key.lower().endswith('.csv'):
                     continue
-                    
-                file_size = obj['Size']
-                last_modified = obj['LastModified']
+                
+                # Skip excluded files
+                if any(pattern in file_key.lower() for pattern in exclude_patterns):
+                    continue
+                
                 file_info = {
                     'source': f"s3://{self.config.s3_bucket}/{file_key}",
                     'format': 'csv',
-                    'size': file_size,
-                    'last_modified': last_modified,
+                    'size': obj['Size'],
+                    'last_modified': obj['LastModified'],
                     'key': file_key
                 }
                 
-                # Categorize files as nodes or edges based on filename
+                # Categorize files as nodes or edges
                 if self._is_edge_file(file_key):
                     edge_files.append(file_info)
-                    self.logger.debug(f"Categorized as EDGE: {file_key}")
                 else:
                     node_files.append(file_info)
-                    self.logger.debug(f"Categorized as NODE: {file_key}")
-                    
+            
             self.logger.info(f"Found {len(node_files)} node files and {len(edge_files)} edge files")
             return node_files, edge_files
             
         except Exception as e:
-            self.logger.error(f"Error listing S3 files: {str(e)}")
+            self.logger.error(f"Error listing S3 files: {e}")
             raise
     
     def _is_edge_file(self, file_key: str) -> bool:
@@ -271,527 +329,410 @@ class NeptuneCurlBulkLoader:
             'person_phone', 'person_form', 'person_name',
             'organization_address', 'building_address'
         ]
-        
-        file_key_lower = file_key.lower()
-        return any(pattern in file_key_lower for pattern in edge_patterns)
+        return any(pattern in file_key.lower() for pattern in edge_patterns)
     
-    def build_curl_command(self, file_info: Dict) -> str:
-        """Build curl command for a single file."""
+    def create_load_jobs(self, node_files: List[Dict], edge_files: List[Dict]) -> List[LoadJob]:
+        """Create LoadJob objects from file lists."""
+        jobs = []
+        
+        # Create node jobs
+        for file_info in node_files:
+            job = LoadJob(
+                file_info=file_info,
+                file_key=file_info['key'],
+                source=file_info['source'],
+                size=file_info['size'],
+                job_type='NODE'
+            )
+            jobs.append(job)
+        
+        # Create edge jobs
+        for file_info in edge_files:
+            job = LoadJob(
+                file_info=file_info,
+                file_key=file_info['key'],
+                source=file_info['source'],
+                size=file_info['size'],
+                job_type='EDGE'
+            )
+            jobs.append(job)
+        
+        # Sort by priority (nodes first, then by size)
+        jobs.sort(key=lambda x: (-x.priority, x.size))
+        
+        self.logger.info(f"Created {len(jobs)} load jobs")
+        return jobs
+    
+    def build_curl_command(self, job: LoadJob) -> List[str]:
+        """Build curl command for a load job."""
         payload = {
-            "source": file_info['source'],
+            "source": job.source,
             "format": "csv",
             "iamRoleArn": self.config.iam_role_arn,
             "region": self.config.region,
-            "failOnError": "FALSE" if not self.config.fail_on_error else "TRUE",
+            "failOnError": "TRUE" if self.config.fail_on_error else "FALSE",
             "parallelism": self.config.parallelism,
             "updateSingleCardinalityProperties": "FALSE"
         }
         
-        # Only add queueRequest if explicitly set to False (to match working curl)
         if not self.config.queue_request:
             payload["queueRequest"] = "FALSE"
         
-        # Build curl command as list of arguments (no shell escaping issues)
         curl_cmd = [
             'curl', '-X', 'POST',
             f'{self.config.endpoint}/loader',
             '-H', 'Content-Type: application/json',
             '--connect-timeout', str(self.config.connect_timeout),
             '--max-time', str(self.config.timeout),
-            '-k',  # Disable SSL verification for localhost
-            '-s',  # Silent mode
+            '-k', '-s',
             '-d', json.dumps(payload)
         ]
-        
-        # For debugging, show the command as it would be executed
-        curl_command = ' '.join(curl_cmd)
-        
-        # Log the exact curl command for debugging
-        if self.config.debug_mode:
-            self.logger.debug(f"Generated curl command for {file_info['key']}:")
-            self.logger.debug(curl_command)
-            self.logger.debug(f"Payload: {json.dumps(payload, indent=2)}")
         
         return curl_cmd
     
-    def test_single_file(self, file_key: str) -> Dict:
-        """Test loading a single file with minimal configuration (matching working curl)."""
-        file_info = {
-            'source': f"s3://{self.config.s3_bucket}/{file_key}",
-            'format': 'csv',
-            'key': file_key,
-            'size': 0
-        }
-        
-        # Use minimal payload matching the working curl command
-        payload = {
-            "source": file_info['source'],
-            "format": "csv",
-            "iamRoleArn": self.config.iam_role_arn,
-            "region": self.config.region,
-            "failOnError": "FALSE",
-            "parallelism": "MEDIUM",
-            "updateSingleCardinalityProperties": "FALSE",
-            "queueRequest": "FALSE"
-        }
-        
-        # Build curl command as list of arguments (no shell escaping issues)
-        curl_cmd = [
-            'curl', '-X', 'POST',
-            f'{self.config.endpoint}/loader',
-            '-H', 'Content-Type: application/json',
-            '--connect-timeout', str(self.config.connect_timeout),
-            '--max-time', str(self.config.timeout),
-            '-k',  # Disable SSL verification for localhost
-            '-s',  # Silent mode
-            '-d', json.dumps(payload)
-        ]
-        
-        # For debugging, show the command as it would be executed
-        curl_command = ' '.join(curl_cmd)
-        
-        self.logger.info(f"Testing single file: {file_key}")
-        self.logger.info(f"Test curl command: {curl_command}")
-        
+    def submit_load_job(self, job: LoadJob) -> bool:
+        """Submit a single load job."""
         try:
+            curl_cmd = self.build_curl_command(job)
+            
             result = subprocess.run(
                 curl_cmd,
-                shell=False,
                 capture_output=True,
                 text=True,
                 timeout=self.config.timeout
             )
             
-            self.logger.info(f"Return code: {result.returncode}")
-            self.logger.info(f"stdout: {result.stdout}")
-            self.logger.info(f"stderr: {result.stderr}")
-            
             if result.returncode == 0:
-                try:
-                    response_data = json.loads(result.stdout)
-                    self.logger.info(f"Response: {response_data}")
-                    return {
-                        'file_key': file_key,
-                        'success': True,
-                        'response': response_data
-                    }
-                except json.JSONDecodeError:
-                    return {
-                        'file_key': file_key,
-                        'success': False,
-                        'error': f"Invalid JSON: {result.stdout}"
-                    }
+                response_data = json.loads(result.stdout)
+                
+                # Check for concurrent load limit error
+                if 'code' in response_data and response_data['code'] == 'BadRequestException':
+                    if 'Max concurrent load limit breached' in response_data.get('detailedMessage', ''):
+                        job.status = LoadStatus.CONCURRENT_LIMIT_EXCEEDED
+                        job.last_error = response_data['detailedMessage']
+                        self.stats['concurrent_limit_hits'] += 1
+                        self.logger.debug(f"Concurrent limit hit for {job.file_key}")
+                        return False
+                
+                # Extract load ID
+                load_id = None
+                if 'payload' in response_data and 'loadId' in response_data['payload']:
+                    load_id = response_data['payload']['loadId']
+                elif 'loadId' in response_data:
+                    load_id = response_data['loadId']
+                
+                if load_id:
+                    job.load_id = load_id
+                    job.status = LoadStatus.SUBMITTED
+                    job.submission_time = datetime.now()
+                    self.active_loads[load_id] = job
+                    self.stats['submitted'] += 1
+                    self.logger.info(f"✓ Submitted {job.file_key} with load ID: {load_id}")
+                    return True
+                else:
+                    job.status = LoadStatus.FAILED
+                    job.last_error = f"No load ID in response: {response_data}"
+                    return False
             else:
-                return {
-                    'file_key': file_key,
-                    'success': False,
-                    'error': f"curl failed: {result.stderr}"
-                }
+                job.status = LoadStatus.FAILED
+                job.last_error = f"curl failed: {result.stderr}"
+                return False
                 
         except Exception as e:
-            return {
-                'file_key': file_key,
-                'success': False,
-                'error': str(e)
-            }
-    
-    def execute_curl_command(self, file_info: Dict) -> Dict:
-        """Execute curl command for a single file with retry logic."""
-        file_key = file_info['key']
-        curl_cmd = self.build_curl_command(file_info)
-        
-        self.logger.debug(f"Executing curl command for {file_key}")
-        self.logger.debug(f"Curl command: {' '.join(curl_cmd)}")
-        
-        last_exception = None
-        for attempt in range(self.config.retry_attempts + 1):
-            try:
-                if attempt > 0:
-                    self.logger.info(f"Retry attempt {attempt}/{self.config.retry_attempts} for file {file_key}")
-                    # Use exponential backoff for retries
-                    backoff_delay = self.config.retry_delay * (2 ** (attempt - 1))
-                    self.logger.info(f"Waiting {backoff_delay} seconds before retry...")
-                    time.sleep(backoff_delay)
-                
-                # Execute curl command (no shell=True to avoid escaping issues)
-                result = subprocess.run(
-                    curl_cmd,
-                    shell=False,
-                    capture_output=True,
-                    text=True,
-                    timeout=self.config.timeout
-                )
-                
-                if result.returncode == 0:
-                    try:
-                        response_data = json.loads(result.stdout)
-                        self.logger.debug(f"Response for {file_key}: {response_data}")
-                        
-                        # Check for concurrent load limit error
-                        if 'code' in response_data and response_data['code'] == 'BadRequestException':
-                            if 'Max concurrent load limit breached' in response_data.get('detailedMessage', ''):
-                                self.logger.warning(f"Concurrent load limit breached for {file_key}, will retry with longer delay")
-                                last_exception = f"Concurrent load limit breached: {response_data['detailedMessage']}"
-                                # Use much longer delay for concurrent limit errors - Neptune needs time to process
-                                wait_time = self.config.retry_delay * 10  # 20 seconds for limit=1 clusters
-                                self.logger.info(f"Waiting {wait_time} seconds for Neptune to process current load...")
-                                time.sleep(wait_time)
-                                continue
-                        
-                        # Try different response structures
-                        load_id = None
-                        if 'payload' in response_data and 'loadId' in response_data['payload']:
-                            load_id = response_data['payload']['loadId']
-                        elif 'loadId' in response_data:
-                            load_id = response_data['loadId']
-                        elif 'status' in response_data and response_data['status'] == '200 OK':
-                            # When queueRequest is FALSE, Neptune might return immediate success
-                            load_id = 'IMMEDIATE_SUCCESS'
-                        
-                        if load_id:
-                            self.logger.info(f"✓ Successfully submitted {file_key} with load ID: {load_id}")
-                            return {
-                                'file_key': file_key,
-                                'load_id': load_id,
-                                'status': 'SUBMITTED',
-                                'size': file_info.get('size', 0),
-                                'attempts': attempt + 1
-                            }
-                        else:
-                            # Log the full response for debugging
-                            self.logger.warning(f"Unexpected response structure for {file_key}: {response_data}")
-                            raise ValueError(f"No load ID found in response: {response_data}")
-                    except json.JSONDecodeError:
-                        self.logger.error(f"Invalid JSON response for {file_key}: {result.stdout}")
-                        raise ValueError(f"Invalid JSON response: {result.stdout[:200]}")
-                else:
-                    error_msg = result.stderr or result.stdout or "Unknown error"
-                    self.logger.error(f"curl failed for {file_key} with return code {result.returncode}")
-                    self.logger.error(f"stdout: {result.stdout}")
-                    self.logger.error(f"stderr: {result.stderr}")
-                    raise subprocess.CalledProcessError(result.returncode, ' '.join(curl_cmd), error_msg)
-                    
-            except subprocess.TimeoutExpired:
-                last_exception = f"Timeout after {self.config.timeout} seconds"
-                self.logger.warning(f"Timeout for {file_key} (attempt {attempt + 1})")
-            except subprocess.CalledProcessError as e:
-                last_exception = f"curl failed with return code {e.returncode}: {e.stderr}"
-                self.logger.warning(f"curl failed for {file_key} (attempt {attempt + 1}): {e.stderr}")
-            except Exception as e:
-                last_exception = str(e)
-                self.logger.warning(f"Error for {file_key} (attempt {attempt + 1}): {e}")
-        
-        # All retries failed
-        self.logger.error(f"✗ Failed to submit {file_key} after {self.config.retry_attempts + 1} attempts: {last_exception}")
-        return {
-            'file_key': file_key,
-            'load_id': 'FAILED',
-            'status': f'FAILED: {last_exception}',
-            'size': file_info.get('size', 0),
-            'attempts': self.config.retry_attempts + 1
-        }
+            job.status = LoadStatus.FAILED
+            job.last_error = str(e)
+            self.logger.error(f"Error submitting {job.file_key}: {e}")
+            return False
     
     def check_load_status(self, load_id: str) -> str:
-        """Check the status of a load job."""
+        """Check the status of a specific load."""
         try:
             curl_cmd = [
                 'curl', '-X', 'GET',
                 f'{self.config.endpoint}/loader/{load_id}',
                 '--connect-timeout', str(self.config.connect_timeout),
                 '--max-time', str(self.config.timeout),
-                '-k',  # Disable SSL verification for localhost
-                '-s'   # Silent mode
+                '-k', '-s'
             ]
             
-            result = subprocess.run(
-                curl_cmd,
-                shell=False,
-                capture_output=True,
-                text=True,
-                timeout=self.config.timeout
-            )
+            result = subprocess.run(curl_cmd, capture_output=True, text=True, timeout=30)
             
             if result.returncode == 0:
-                try:
-                    response_data = json.loads(result.stdout)
-                    return response_data.get('payload', {}).get('overallStatus', {}).get('status', 'UNKNOWN')
-                except json.JSONDecodeError:
-                    return 'UNKNOWN'
-            else:
-                return 'UNKNOWN'
-                
+                response_data = json.loads(result.stdout)
+                return response_data.get('payload', {}).get('overallStatus', {}).get('status', 'UNKNOWN')
+            
         except Exception as e:
-            self.logger.warning(f"Error checking load status for {load_id}: {e}")
-            return 'UNKNOWN'
+            self.logger.debug(f"Error checking status for {load_id}: {e}")
+        
+        return 'UNKNOWN'
     
-    def wait_for_load_completion(self, load_id: str, max_wait_time: int = 300) -> bool:
-        """Wait for a load job to complete."""
-        start_time = time.time()
-        while time.time() - start_time < max_wait_time:
-            status = self.check_load_status(load_id)
-            if status in ['LOAD_COMPLETED', 'LOAD_FAILED', 'LOAD_CANCELLED']:
-                self.logger.info(f"Load {load_id} completed with status: {status}")
-                return status == 'LOAD_COMPLETED'
-            elif status == 'LOAD_IN_PROGRESS':
-                self.logger.debug(f"Load {load_id} still in progress...")
-                time.sleep(5)  # Wait 5 seconds before checking again
-            else:
-                self.logger.debug(f"Load {load_id} status: {status}")
-                time.sleep(5)
-        
-        self.logger.warning(f"Timeout waiting for load {load_id} to complete")
-        return False
-    
-    def submit_jobs_sequential(self, files: List[Dict], job_type: str) -> List[Dict]:
-        """Submit jobs sequentially to respect Neptune's concurrent load limits."""
-        if not files:
-            return []
-        
-        self.logger.info(f"Starting sequential submission of {len(files)} {job_type} files")
-        print(f"Submitting {len(files)} {job_type} files sequentially (respecting Neptune's concurrent load limit)...")
-        
-        job_results = []
-        completed = 0
-        
-        # Sort files by size (largest first) for better resource utilization
-        sorted_files = sorted(files, key=lambda x: x.get('size', 0), reverse=True)
-        
-        for file_info in sorted_files:
+    def monitor_active_loads(self):
+        """Monitor active loads and update their status."""
+        while not self.shutdown_event.is_set():
             try:
-                result = self.execute_curl_command(file_info)
-                job_results.append(result)
-                completed += 1
-                print_progress(completed, len(files), f"  {job_type} Progress")
+                current_time = datetime.now()
+                completed_load_ids = []
                 
-                # For Neptune clusters with concurrent load limit=1, wait for completion
-                if self.config.wait_for_completion and result['status'] == 'SUBMITTED' and result['load_id'] != 'IMMEDIATE_SUCCESS':
-                    self.logger.info(f"Waiting for load {result['load_id']} to complete before next submission...")
-                    success = self.wait_for_load_completion(result['load_id'])
-                    if not success:
-                        self.logger.warning(f"Load {result['load_id']} may not have completed successfully")
-                else:
-                    # If not waiting for completion or immediate success/failed, add a small delay
-                    file_size_mb = file_info.get('size', 0) / (1024 * 1024)
-                    if file_size_mb > 100:  # Large files
-                        delay = 3.0  # 3 seconds for large files
-                    elif file_size_mb > 10:  # Medium files
-                        delay = 2.0  # 2 seconds for medium files
-                    else:  # Small files
-                        delay = 1.0  # 1 second for small files
+                for load_id, job in self.active_loads.items():
+                    status = self.check_load_status(load_id)
                     
-                    self.logger.info(f"Waiting {delay} seconds before next submission (file size: {file_size_mb:.1f} MB)")
-                    time.sleep(delay)
+                    if status == 'LOAD_COMPLETED':
+                        job.status = LoadStatus.COMPLETED
+                        job.completion_time = current_time
+                        self.completed_jobs.append(job)
+                        completed_load_ids.append(load_id)
+                        self.stats['completed'] += 1
+                        self.logger.info(f"✓ Completed: {job.file_key}")
+                        
+                    elif status in ['LOAD_FAILED', 'LOAD_CANCELLED']:
+                        job.status = LoadStatus.FAILED
+                        job.completion_time = current_time
+                        job.last_error = f"Load {status.lower()}"
+                        
+                        # Retry if attempts remaining
+                        if job.retry_count < self.config.max_retry_attempts:
+                            job.status = LoadStatus.RETRY_REQUIRED
+                            self.retry_queue.put(job)
+                            self.logger.info(f"⚠️ Scheduling retry for {job.file_key} (attempt {job.retry_count + 1})")
+                        else:
+                            self.failed_jobs.append(job)
+                            self.stats['failed'] += 1
+                            self.logger.error(f"✗ Failed permanently: {job.file_key}")
+                        
+                        completed_load_ids.append(load_id)
+                    
+                    elif status == 'LOAD_IN_PROGRESS':
+                        job.status = LoadStatus.IN_PROGRESS
+                
+                # Remove completed loads from active tracking
+                for load_id in completed_load_ids:
+                    del self.active_loads[load_id]
+                
+                # Sleep before next check
+                self.shutdown_event.wait(self.config.health_check_interval)
                 
             except Exception as e:
-                self.logger.error(f"Error processing file {file_info['key']}: {e}")
-                job_results.append({
-                    'file_key': file_info['key'],
-                    'load_id': 'FAILED',
-                    'status': f'PROCESSING_ERROR: {str(e)}',
-                    'size': file_info.get('size', 0),
-                    'attempts': 0
-                })
-        
-        print()  # New line after progress bar
-        self.logger.info(f"✓ Completed sequential submission of {len(job_results)} {job_type} jobs")
-        return job_results
+                self.logger.error(f"Error in load monitoring: {e}")
+                self.shutdown_event.wait(5)
     
-    def submit_jobs_concurrent(self, files: List[Dict], job_type: str) -> List[Dict]:
-        """Submit jobs concurrently with progress tracking."""
-        if not files:
-            return []
-        
-        self.logger.info(f"Starting concurrent submission of {len(files)} {job_type} files")
-        print(f"Submitting {len(files)} {job_type} files using {self.config.max_workers} workers...")
-        
-        job_results = []
-        completed = 0
-        
-        with ThreadPoolExecutor(max_workers=self.config.max_workers) as executor:
-            # Submit all jobs
-            future_to_file = {
-                executor.submit(self.execute_curl_command, file_info): file_info 
-                for file_info in files
-            }
-            
-            # Process completed jobs
-            for future in as_completed(future_to_file):
+    def process_job_queue(self):
+        """Process the job queue respecting concurrent limits."""
+        while not self.shutdown_event.is_set():
+            try:
+                # Check if we can submit more jobs
+                if len(self.active_loads) >= self.concurrent_limit:
+                    self.logger.debug(f"At concurrent limit ({self.concurrent_limit}), waiting...")
+                    self.shutdown_event.wait(self.config.queue_wait_time)
+                    continue
+                
+                # Try to get a job from retry queue first
+                job = None
                 try:
-                    result = future.result()
-                    job_results.append(result)
-                    completed += 1
-                    print_progress(completed, len(files), f"  {job_type} Progress")
-                except Exception as e:
-                    self.logger.error(f"Error processing future result: {e}")
-                    job_results.append({
-                        'file_key': 'UNKNOWN',
-                        'load_id': 'FAILED',
-                        'status': f'FUTURE_ERROR: {str(e)}',
-                        'size': 0,
-                        'attempts': 0
-                    })
-        
-        print()  # New line after progress bar
-        self.logger.info(f"✓ Completed concurrent submission of {len(job_results)} {job_type} jobs")
-        return job_results
+                    job = self.retry_queue.get_nowait()
+                    job.retry_count += 1
+                    self.stats['retries'] += 1
+                    
+                    # Apply exponential backoff for retries
+                    backoff_time = min(
+                        self.config.initial_backoff * (self.config.backoff_multiplier ** (job.retry_count - 1)),
+                        self.config.max_backoff
+                    )
+                    self.logger.info(f"Applying {backoff_time}s backoff for retry of {job.file_key}")
+                    self.shutdown_event.wait(backoff_time)
+                    
+                except Empty:
+                    # Try to get a job from pending queue
+                    try:
+                        job = self.pending_queue.get_nowait()
+                    except Empty:
+                        # No jobs available, wait and continue
+                        self.shutdown_event.wait(self.config.queue_wait_time)
+                        continue
+                
+                # Submit the job
+                if job:
+                    success = self.submit_load_job(job)
+                    
+                    if not success:
+                        if job.status == LoadStatus.CONCURRENT_LIMIT_EXCEEDED:
+                            # Put back in queue to try again later
+                            self.pending_queue.put(job)
+                            job.status = LoadStatus.PENDING
+                            
+                            # Wait a bit longer when hitting concurrent limits
+                            wait_time = self.config.queue_wait_time * 2
+                            self.logger.debug(f"Concurrent limit hit, waiting {wait_time}s before retry")
+                            self.shutdown_event.wait(wait_time)
+                        else:
+                            # Other failure - schedule for retry if attempts remaining
+                            if job.retry_count < self.config.max_retry_attempts:
+                                job.status = LoadStatus.RETRY_REQUIRED
+                                self.retry_queue.put(job)
+                            else:
+                                self.failed_jobs.append(job)
+                                self.stats['failed'] += 1
+                
+            except Exception as e:
+                self.logger.error(f"Error in queue processing: {e}")
+                self.shutdown_event.wait(5)
     
     def load_all_files(self) -> Dict:
-        """Load all files from S3 bucket into Neptune - nodes first, then edges."""
+        """Load all files with intelligent concurrent management."""
         start_time = datetime.now()
-        self.logger.info(f"Starting load_all_files for bucket: {self.config.s3_bucket}")
         
         try:
-            # Get list of files separated into nodes and edges
-            self.logger.info("Retrieving file list from S3...")
+            # Detect concurrent limit
+            self.detect_concurrent_limit()
+            
+            # Get files and create jobs
             node_files, edge_files = self.get_files_from_s3()
+            jobs = self.create_load_jobs(node_files, edge_files)
             
-            if not node_files and not edge_files:
-                self.logger.warning("No files to load")
-                return {
-                    'total_files': 0,
-                    'submitted': 0,
-                    'failed': 0,
-                    'duration': datetime.now() - start_time
-                }
-                
-            total_files = len(node_files) + len(edge_files)
-            total_size = sum(f.get('size', 0) for f in node_files + edge_files)
-            total_size_gb = total_size / (1024*1024*1024)
+            if not jobs:
+                self.logger.warning("No jobs to process")
+                return self._create_result_summary(start_time)
             
-            self.logger.info(f"Processing {total_files} files with total size {total_size_gb:.2f} GB")
-            print(f"Found {len(node_files)} node files and {len(edge_files)} edge files to submit")
-            print(f"Total data size: {total_size_gb:.2f} GB")
-            print(f"Using {self.config.max_workers} concurrent workers for job submission")
+            self.stats['total_jobs'] = len(jobs)
             
-            job_results = []
+            # Add jobs to pending queue
+            for job in jobs:
+                self.pending_queue.put(job)
             
-            # Load nodes first
-            if node_files:
-                self.logger.info(f"Starting node file submission for {len(node_files)} files...")
-                if self.config.use_sequential:
-                    node_results = self.submit_jobs_sequential(node_files, "NODE")
-                else:
-                    node_results = self.submit_jobs_concurrent(node_files, "NODE")
-                job_results.extend(node_results)
-                self.logger.info(f"✓ Completed node file submission, {len(node_results)} results")
+            self.logger.info(f"Starting concurrent load management for {len(jobs)} jobs")
+            self.logger.info(f"Concurrent limit: {self.concurrent_limit}")
             
-            # Load edges second
-            if edge_files:
-                self.logger.info(f"Starting edge file submission for {len(edge_files)} files...")
-                if self.config.use_sequential:
-                    edge_results = self.submit_jobs_sequential(edge_files, "EDGE")
-                else:
-                    edge_results = self.submit_jobs_concurrent(edge_files, "EDGE")
-                job_results.extend(edge_results)
-                self.logger.info(f"✓ Completed edge file submission, {len(edge_results)} results")
+            # Start monitoring and processing threads
+            self.load_monitor_thread = threading.Thread(target=self.monitor_active_loads, daemon=True)
+            self.queue_processor_thread = threading.Thread(target=self.process_job_queue, daemon=True)
             
-            # Print summary
-            self._print_job_report(job_results, node_files, edge_files, total_files, total_size, start_time)
+            self.load_monitor_thread.start()
+            self.queue_processor_thread.start()
             
-            return {
-                'total_files': total_files,
-                'submitted': len([r for r in job_results if r['status'] == 'SUBMITTED']),
-                'failed': len([r for r in job_results if r['status'] != 'SUBMITTED']),
-                'duration': datetime.now() - start_time,
-                'results': job_results
-            }
+            # Wait for all jobs to complete
+            self._wait_for_completion()
+            
+            # Shutdown threads
+            self.shutdown_event.set()
+            
+            return self._create_result_summary(start_time)
             
         except Exception as e:
-            self.logger.error(f"Error in load_all_files: {str(e)}")
-            self.logger.debug(f"Error details: {traceback.format_exc()}")
+            self.logger.error(f"Error in load_all_files: {e}")
+            self.shutdown_event.set()
             raise
     
-    def _print_job_report(self, job_results: List[Dict], node_files: List[Dict], 
-                         edge_files: List[Dict], total_files: int, total_size: int, start_time: datetime):
-        """Print a detailed job report."""
+    def _wait_for_completion(self):
+        """Wait for all jobs to complete with progress reporting."""
+        last_report_time = datetime.now()
+        report_interval = 30  # Report progress every 30 seconds
+        
+        while True:
+            # Check if all jobs are done
+            total_processed = len(self.completed_jobs) + len(self.failed_jobs)
+            
+            if total_processed >= self.stats['total_jobs']:
+                self.logger.info("All jobs completed!")
+                break
+            
+            # Check if we should report progress
+            current_time = datetime.now()
+            if (current_time - last_report_time).seconds >= report_interval:
+                self._report_progress()
+                last_report_time = current_time
+            
+            # Wait before next check
+            time.sleep(5)
+    
+    def _report_progress(self):
+        """Report current progress."""
+        total = self.stats['total_jobs']
+        completed = len(self.completed_jobs)
+        failed = len(self.failed_jobs)
+        active = len(self.active_loads)
+        pending = self.pending_queue.qsize()
+        retry = self.retry_queue.qsize()
+        
+        progress = ((completed + failed) / total * 100) if total > 0 else 0
+        
+        self.logger.info(f"Progress: {progress:.1f}% | "
+                        f"Completed: {completed} | Failed: {failed} | "
+                        f"Active: {active} | Pending: {pending} | Retry: {retry}")
+    
+    def _create_result_summary(self, start_time: datetime) -> Dict:
+        """Create a summary of the load operation."""
         duration = datetime.now() - start_time
-        total_size_gb = total_size / (1024*1024*1024)
         
-        successful = [r for r in job_results if r['status'] == 'SUBMITTED']
-        failed = [r for r in job_results if r['status'] != 'SUBMITTED']
+        return {
+            'total_jobs': self.stats['total_jobs'],
+            'completed': len(self.completed_jobs),
+            'failed': len(self.failed_jobs),
+            'duration': duration,
+            'stats': self.stats,
+            'concurrent_limit': self.concurrent_limit
+        }
+    
+    def print_final_report(self, result: Dict):
+        """Print a comprehensive final report."""
+        print(f"\n{Fore.BLUE}{'=' * 80}{Style.RESET_ALL}")
+        print(f"{Fore.BLUE}{'Neptune Concurrent Load Report'.center(80)}{Style.RESET_ALL}")
+        print(f"{Fore.BLUE}{'=' * 80}{Style.RESET_ALL}\n")
         
-        print_header("Neptune Bulk Load Summary")
-        print(f"{Fore.CYAN}Total Files:{Style.RESET_ALL} {total_files}")
-        print(f"{Fore.CYAN}Total Size:{Style.RESET_ALL} {total_size_gb:.2f} GB")
-        print(f"{Fore.CYAN}Node Files:{Style.RESET_ALL} {len(node_files)}")
-        print(f"{Fore.CYAN}Edge Files:{Style.RESET_ALL} {len(edge_files)}")
-        print(f"{Fore.CYAN}Successful:{Style.RESET_ALL} {len(successful)}")
-        print(f"{Fore.CYAN}Failed:{Style.RESET_ALL} {len(failed)}")
-        print(f"{Fore.CYAN}Duration:{Style.RESET_ALL} {duration}")
-        print(f"{Fore.CYAN}Success Rate:{Style.RESET_ALL} {(len(successful)/total_files*100):.1f}%")
+        print(f"{Fore.CYAN}Total Jobs:{Style.RESET_ALL} {result['total_jobs']}")
+        print(f"{Fore.GREEN}Completed:{Style.RESET_ALL} {result['completed']}")
+        print(f"{Fore.RED}Failed:{Style.RESET_ALL} {result['failed']}")
+        print(f"{Fore.CYAN}Duration:{Style.RESET_ALL} {result['duration']}")
+        print(f"{Fore.CYAN}Concurrent Limit:{Style.RESET_ALL} {result['concurrent_limit']}")
+        print(f"{Fore.CYAN}Concurrent Limit Hits:{Style.RESET_ALL} {result['stats']['concurrent_limit_hits']}")
+        print(f"{Fore.CYAN}Total Retries:{Style.RESET_ALL} {result['stats']['retries']}")
         
-        if failed:
-            print(f"\n{Fore.RED}Failed Files:{Style.RESET_ALL}")
-            for result in failed:
-                print(f"  - {result['file_key']}: {result['status']}")
+        success_rate = (result['completed'] / result['total_jobs'] * 100) if result['total_jobs'] > 0 else 0
+        print(f"{Fore.CYAN}Success Rate:{Style.RESET_ALL} {success_rate:.1f}%")
         
-        if successful:
-            print(f"\n{Fore.GREEN}Successful Files:{Style.RESET_ALL}")
-            for result in successful[:10]:  # Show first 10
-                print(f"  - {result['file_key']}: {result['load_id']}")
-            if len(successful) > 10:
-                print(f"  ... and {len(successful) - 10} more")
+        if self.failed_jobs:
+            print(f"\n{Fore.RED}Failed Jobs:{Style.RESET_ALL}")
+            for job in self.failed_jobs:
+                print(f"  - {job.file_key}: {job.last_error}")
 
 def main():
-    """Main function to run the Neptune curl bulk loader."""
-    print_header("Neptune Curl Bulk Loader - HIGH PERFORMANCE MODE")
-    
-    # Check for test mode
-    test_file = os.getenv('NEPTUNE_TEST_FILE')
-    
-    # Check for performance mode
-    performance_mode = os.getenv('NEPTUNE_PERFORMANCE_MODE', 'false').lower() == 'true'
-    ultra_mode = os.getenv('NEPTUNE_ULTRA_MODE', 'false').lower() == 'true'
+    """Main function."""
+    print(f"{Fore.BLUE}{'=' * 80}{Style.RESET_ALL}")
+    print(f"{Fore.BLUE}{'Neptune Concurrent Load Manager'.center(80)}{Style.RESET_ALL}")
+    print(f"{Fore.BLUE}{'=' * 80}{Style.RESET_ALL}\n")
     
     try:
-        # Load configuration from environment variables - Always use high performance
-        if ultra_mode:
-            print(f"{Fore.RED}Ultra Performance Mode: Using maximum performance configuration{Style.RESET_ALL}")
-            print(f"{Fore.RED}⚠️  Only use this for Neptune clusters with concurrent load limit > 5{Style.RESET_ALL}")
-            config = NeptuneConfig.ultra_performance()
-        else:
-            print(f"{Fore.GREEN}HIGH PERFORMANCE MODE: Using optimized high-performance configuration{Style.RESET_ALL}")
-            config = NeptuneConfig.high_performance()
+        # Load configuration
+        config = ConcurrentLoadConfig.from_env()
         
         if not config.iam_role_arn:
             print(f"{Fore.RED}Error: NEPTUNE_IAM_ROLE_ARN environment variable is required{Style.RESET_ALL}")
             print("Example: export NEPTUNE_IAM_ROLE_ARN='arn:aws:iam::123456789012:role/NeptuneLoadFromS3'")
             sys.exit(1)
         
-        # Print configuration summary
-        print(f"{Fore.CYAN}Neptune Endpoint:{Style.RESET_ALL} {config.endpoint}")
-        print(f"{Fore.CYAN}AWS Region:{Style.RESET_ALL} {config.region}")
-        print(f"{Fore.CYAN}S3 Bucket:{Style.RESET_ALL} {config.s3_bucket}")
+        # Print configuration
+        print(f"{Fore.CYAN}Configuration:{Style.RESET_ALL}")
+        print(f"  Neptune Endpoint: {config.endpoint}")
+        print(f"  AWS Region: {config.region}")
+        print(f"  S3 Bucket: {config.s3_bucket}")
+        if config.s3_prefix:
+            print(f"  S3 Prefix: {config.s3_prefix}")
+        print(f"  Concurrent Limit: {'Auto-detect' if config.concurrent_limit is None else config.concurrent_limit}")
+        print(f"  Max Retry Attempts: {config.max_retry_attempts}")
+        print(f"  Queue Wait Time: {config.queue_wait_time}s")
         print()
         
-        # Print performance information
-        config.print_performance_info()
-        print()
+        # Create and run concurrent load manager
+        manager = ConcurrentLoadManager(config)
+        result = manager.load_all_files()
         
-        # Create bulk loader and execute
-        loader = NeptuneCurlBulkLoader(config)
-        
-        # Test mode - test a single file
-        if test_file:
-            print(f"{Fore.CYAN}Test Mode: Testing single file {test_file}{Style.RESET_ALL}")
-            test_result = loader.test_single_file(test_file)
-            if test_result['success']:
-                print(f"{Fore.GREEN}✓ Test successful!{Style.RESET_ALL}")
-                print(f"Response: {test_result['response']}")
-                sys.exit(0)
-            else:
-                print(f"{Fore.RED}✗ Test failed: {test_result['error']}{Style.RESET_ALL}")
-                sys.exit(1)
-        
-        # Normal mode - load all files
-        result = loader.load_all_files()
+        # Print final report
+        manager.print_final_report(result)
         
         # Exit with appropriate code
         if result['failed'] > 0:
-            print(f"\n{Fore.YELLOW}Warning: {result['failed']} files failed to load{Style.RESET_ALL}")
+            print(f"\n{Fore.YELLOW}⚠️  {result['failed']} jobs failed. Check logs for details.{Style.RESET_ALL}")
             sys.exit(1)
         else:
-            print(f"\n{Fore.GREEN}✓ All files loaded successfully!{Style.RESET_ALL}")
+            print(f"\n{Fore.GREEN}✅ All jobs completed successfully!{Style.RESET_ALL}")
             sys.exit(0)
             
     except KeyboardInterrupt:
@@ -804,4 +745,4 @@ def main():
         sys.exit(1)
 
 if __name__ == "__main__":
-    main() 
+    main()
