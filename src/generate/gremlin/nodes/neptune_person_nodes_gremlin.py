@@ -141,7 +141,7 @@ def stream_to_csv_parallel(num_records, output_path, column_order, progress_inte
             if records_written % 50000 == 0:
                 file_size = os.path.getsize(output_path)
                 if file_size > MAX_FILE_SIZE_BYTES:
-                    print(f"⚠️  WARNING: File size ({file_size / (1024**3):.2f} GB) exceeds 2.5GB limit!")
+                    print(f"⚠️  WARNING: File size ({file_size / (1024**3):.2f} GB) exceeds 2GB limit!")
                     print(f"   Stopping at {records_written:,} records")
                     break
     
@@ -187,7 +187,7 @@ def stream_to_csv_optimized(num_records, output_path, column_order, progress_int
                 if records_written % size_check_interval == 0:
                     file_size = os.path.getsize(output_path)
                     if file_size > MAX_FILE_SIZE_BYTES:
-                        print(f"⚠️  WARNING: File size ({file_size / (1024**3):.2f} GB) exceeds 2.5GB limit!")
+                        print(f"⚠️  WARNING: File size ({file_size / (1024**3):.2f} GB) exceeds 2GB limit!")
                         print(f"   Stopping at {records_written:,} records")
                         break
             
@@ -229,7 +229,7 @@ def estimate_optimal_records_per_file():
     optimal_records = int(target_file_size / avg_record_size)
     
     print(f"Estimated average record size: {avg_record_size:.1f} bytes")
-    print(f"Estimated records per 2.5GB file: {optimal_records:,}")
+    print(f"Estimated records per 2GB file: {optimal_records:,}")
     
     return optimal_records
 
@@ -323,13 +323,13 @@ def main():
         compare_performance(min(100000, num_records))
     
     # Estimate optimal records per file
-    print("\n📊 Estimating optimal records per 2.5GB file...")
+    print("\n📊 Estimating optimal records per 2GB file...")
     optimal_records = estimate_optimal_records_per_file()
     
     # Check if we need to split into multiple files
     if num_records > optimal_records:
         num_files = (num_records + optimal_records - 1) // optimal_records
-        print(f"\n📁 Will split into {num_files} files to stay under 2.5GB limit")
+        print(f"\n📁 Will split into {num_files} files to stay under 2GB limit")
         
         total_generated = 0
         total_file_size = 0
@@ -376,9 +376,9 @@ def main():
         max_file_size = file_size
     
     if max_file_size > MAX_FILE_SIZE_BYTES:
-        print(f"⚠️  WARNING: Largest file ({max_file_size / (1024**3):.2f} GB) exceeds 2.5GB limit!")
+        print(f"⚠️  WARNING: Largest file ({max_file_size / (1024**3):.2f} GB) exceeds 2GB limit!")
     else:
-        print(f"✅ All files are within 2.5GB limit.")
+        print(f"✅ All files are within 2GB limit.")
     
     return True
 

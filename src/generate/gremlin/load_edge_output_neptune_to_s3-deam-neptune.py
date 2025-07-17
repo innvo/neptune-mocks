@@ -137,7 +137,7 @@ def upload_files_to_s3(local_dir: str, s3_bucket: str, s3_prefix: str = ''):
 
 if __name__ == "__main__":
     # Configuration
-    LOCAL_DIR = "src/data/output/neptune"
+    LOCAL_DIR = "src/data/output/neptune/edges"
     S3_BUCKET = "deam-neptune"
     
     try:
