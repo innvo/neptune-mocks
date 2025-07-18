@@ -345,7 +345,8 @@ class NeptuneLoaderStatusWithFiles:
         """
         try:
             if file_path.startswith('s3://'):
-                return self._count_s3_csv_rows(file_path)
+                # return self._count_s3_csv_rows(file_path)  # Commented out S3 row counting
+                return None  # Return None for S3 files since counting is disabled
             else:
                 return self._count_local_csv_rows(file_path)
         except Exception as e:
