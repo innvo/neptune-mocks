@@ -39,7 +39,7 @@ python src/generate/gremlin/tests/neptune_bulk_load_concurrency_test.py\
   arn:aws:iam::244081531951:role/NeptuneLoadFromS3 \
   --create-sample-data \
   --data-files 10 \
-  --records-per-file 2500000 \
+  --records-per-file 5000000 \
   --max-concurrency 15\
   --step 10
 

@@ -96,8 +96,8 @@ def stream_to_csv(num_records, output_path, column_order, progress_interval=1000
     records_written = 0
     
     with open(output_path, 'w', newline='', encoding='utf-8') as csvfile:
-        writer = csv.DictWriter(csvfile, fieldnames=column_order, quoting=csv.QUOTE_MINIMAL)
-        writer.writeheader()
+        writer = csv.writer(csvfile, quoting=csv.QUOTE_MINIMAL)
+        writer.writerow(column_order)  # Write header
         
         # Update file size after header
         csvfile.flush()
@@ -107,9 +107,8 @@ def stream_to_csv(num_records, output_path, column_order, progress_interval=1000
             # Generate single record
             record = generate_address_record()
             
-            # Write record immediately
-            ordered_record = {col: record.get(col, '') for col in column_order}
-            writer.writerow(ordered_record)
+            # Write record immediately - record is a tuple (node_id, label)
+            writer.writerow(record)
             
             records_written += 1
             
