@@ -6,6 +6,10 @@ from botocore.exceptions import ClientError
 import math
 from tqdm import tqdm
 import threading
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(
@@ -138,7 +142,11 @@ def upload_files_to_s3(local_dir: str, s3_bucket: str, s3_prefix: str = ''):
 if __name__ == "__main__":
     # Configuration
     LOCAL_DIR = "src/data/output/neptune/edges"
-    S3_BUCKET = "deam-neptune"
+    S3_BUCKET = os.getenv("S3_BUCKET", "deam-neptune")  # Use .env file with fallback
+    
+    if not S3_BUCKET or S3_BUCKET == "your-s3-bucket-name":
+        logger.error("S3_BUCKET not properly configured in .env file")
+        exit(1)
     
     try:
         upload_files_to_s3(LOCAL_DIR, S3_BUCKET)
