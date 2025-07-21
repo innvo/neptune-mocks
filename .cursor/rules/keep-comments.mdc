@@ -1,0 +1,6 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+When updating a existing file with comments dont delete the existing comments.  You can can new comments.
