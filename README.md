@@ -5,11 +5,17 @@ pip install -r requirements.txt
 ```
 
 2. Configure environment variables
-```
+```bash
 cp env.template .env
 ```
 Edit the `.env` file and set your configuration values, particularly:
 - `S3_BUCKET`: Your S3 bucket name for Neptune data files
+- `NEPTUNE_IAM_ROLE_ARN`: Your IAM role ARN for Neptune to access S3
+
+You can test your environment setup with:
+```bash
+python test_env_loading.py
+```
 
 3. Install mermaid dependencies
 ```
@@ -56,22 +62,28 @@ curl -k -X GET https://localhost:8182/status
 4. run src/utils/load_data_output_neptune_to_s3-deam-neptune.py
   - uploades csv files to S3 bucket
 5. Clean out vertices or fast rest neptune (optional)
-6. run curl command to execute neptune bulkloader (gremlin)
-```
-curl -k -X POST \
-  -H "Content-Type: application/json" \
-  -d '{
-    "source": "s3://deam-neptune/neptune_person_nodes_gremlin.csv",
-    "format": "csv",
-    "iamRoleArn": "arn:aws:iam::244081531951:role/NeptuneLoadFromS3",
-    "region": "us-east-1",
-    "failOnError": "TRUE",
-    "parallelism": "MEDIUM",
-    "updateSingleCardinalityProperties": "FALSE",
-    "queueRequest": "TRUE"
-  }' \
-  https://localhost:8182/loader
-```
+6. run the Neptune bulk loader script (recommended) or use curl command
+   ```bash
+   # Recommended: Use the automated bulk loader script
+   python src/generate/gremlin/bulk_load_nodes_edges.py
+   ```
+   
+   Or manually with curl:
+   ```bash
+   curl -k -X POST \
+     -H "Content-Type: application/json" \
+     -d '{
+       "source": "s3://deam-neptune/neptune_person_nodes_gremlin.csv",
+       "format": "csv",
+       "iamRoleArn": "arn:aws:iam::244081531951:role/NeptuneLoadFromS3",
+       "region": "us-east-1",
+       "failOnError": "TRUE",
+       "parallelism": "MEDIUM",
+       "updateSingleCardinalityProperties": "FALSE",
+       "queueRequest": "TRUE"
+     }' \
+     https://localhost:8182/loader
+   ```
 7. User opencypher or gremlin.pynb to check data load
 
 

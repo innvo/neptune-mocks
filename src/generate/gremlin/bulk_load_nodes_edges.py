@@ -17,10 +17,16 @@ Features:
 - Comprehensive error handling and recovery
 
 Environment Variables:
-- NEPTUNE_ENDPOINT: Neptune cluster endpoint (default: https://localhost:8182)
+Environment variables can be set in a .env file in the project root directory.
+Copy env.template to .env and update the values with your configuration.
+
+Required Environment Variables:
 - NEPTUNE_IAM_ROLE_ARN: IAM role ARN for S3 access (required)
+- S3_BUCKET: S3 bucket name (required)
+
+Optional Environment Variables:
+- NEPTUNE_ENDPOINT: Neptune cluster endpoint (default: https://localhost:8182)
 - AWS_REGION: AWS region (default: us-east-1)
-- S3_BUCKET: S3 bucket name (default: deam-neptune)
 - S3_PREFIX: S3 prefix/subdirectory to load files from (default: root of bucket)
 - S3_EXCLUDE_PATTERNS: Comma-separated patterns to exclude (default: archive/,backup/,old/,temp/,tmp/)
 - NEPTUNE_CONCURRENT_LIMIT: Override detected concurrent limit (default: auto-detect)
@@ -50,6 +56,10 @@ from colorama import init, Fore, Style
 from queue import Queue, Empty
 from enum import Enum
 import random
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Initialize colorama for colored output
 init()
@@ -177,11 +187,11 @@ class ConcurrentLoadConfig:
     def validate(self) -> None:
         """Validate configuration."""
         if not self.iam_role_arn:
-            raise ValueError("IAM role ARN is required. Set NEPTUNE_IAM_ROLE_ARN environment variable.")
+            raise ValueError("IAM role ARN is required. Set NEPTUNE_IAM_ROLE_ARN environment variable in your .env file.")
         if not self.endpoint:
             raise ValueError("Neptune endpoint is required.")
         if not self.s3_bucket:
-            raise ValueError("S3 bucket is required.")
+            raise ValueError("S3 bucket is required. Set S3_BUCKET environment variable in your .env file.")
 
 class ConcurrentLoadManager:
     """Manages concurrent loads for Neptune with intelligent queue management."""
@@ -749,7 +759,16 @@ def main():
         
         if not config.iam_role_arn:
             print(f"{Fore.RED}Error: NEPTUNE_IAM_ROLE_ARN environment variable is required{Style.RESET_ALL}")
-            print("Example: export NEPTUNE_IAM_ROLE_ARN='arn:aws:iam::123456789012:role/NeptuneLoadFromS3'")
+            print("Please set this in your .env file:")
+            print("Example: NEPTUNE_IAM_ROLE_ARN='arn:aws:iam::123456789012:role/NeptuneLoadFromS3'")
+            print("\nIf you don't have a .env file, copy env.template to .env and update the values.")
+            sys.exit(1)
+        
+        if not config.s3_bucket or config.s3_bucket == "deam-neptune":
+            print(f"{Fore.RED}Error: S3_BUCKET environment variable is required{Style.RESET_ALL}")
+            print("Please set this in your .env file:")
+            print("Example: S3_BUCKET='your-s3-bucket-name'")
+            print("\nIf you don't have a .env file, copy env.template to .env and update the values.")
             sys.exit(1)
         
         # Print configuration
