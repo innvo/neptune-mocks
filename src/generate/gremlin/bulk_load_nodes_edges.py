@@ -201,15 +201,13 @@ class NeptuneBulkLoader:
         return []
     
     def get_files_from_s3(self) -> tuple[List[Dict], List[Dict]]:
-        """Get list of CSV files from S3 bucket, separated into nodes and edges."""
+        """Get list of CSV files from S3 bucket root, separated into nodes and edges."""
         try:
-            if self.config.s3_prefix:
-                response = self.s3_client.list_objects_v2(
-                    Bucket=self.config.s3_bucket, 
-                    Prefix=self.config.s3_prefix
-                )
-            else:
-                response = self.s3_client.list_objects_v2(Bucket=self.config.s3_bucket)
+            # Only list objects in the root of the bucket (no prefix or delimiter)
+            response = self.s3_client.list_objects_v2(
+                Bucket=self.config.s3_bucket,
+                Delimiter='/'
+            )
             
             if 'Contents' not in response:
                 self.logger.warning(f"No files found in s3://{self.config.s3_bucket}")
@@ -225,6 +223,10 @@ class NeptuneBulkLoader:
                 if not file_key.lower().endswith('.csv'):
                     continue
                 
+                # Only process files that are directly in the root (no path separators)
+                if '/' in file_key:
+                    continue
+                
                 file_info = {
                     'source': f"s3://{self.config.s3_bucket}/{file_key}",
                     'format': 'csv',
@@ -238,7 +240,7 @@ class NeptuneBulkLoader:
                 else:
                     node_files.append(file_info)
             
-            self.logger.info(f"Found {len(node_files)} node files and {len(edge_files)} edge files")
+            self.logger.info(f"Found {len(node_files)} node files and {len(edge_files)} edge files in root")
             return node_files, edge_files
             
         except Exception as e:
