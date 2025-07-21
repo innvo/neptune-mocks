@@ -3,12 +3,49 @@
 import boto3
 import argparse
 import json
+import os
 from collections import defaultdict
 from datetime import datetime
+from dotenv import load_dotenv
+
+def find_dotenv(start_dir):
+    """Find .env file by searching up the directory tree"""
+    current_dir = start_dir
+    while True:
+        env_path = os.path.join(current_dir, '.env')
+        if os.path.isfile(env_path):
+            return env_path
+        parent_dir = os.path.dirname(current_dir)
+        if parent_dir == current_dir:
+            break
+        current_dir = parent_dir
+    return None
+
+def validate_env_variables():
+    """Validate and return environment variables"""
+    bucket_name = os.getenv('S3_BUCKET')
+    
+    if not bucket_name:
+        raise ValueError("❌ ERROR: Missing environment variable S3_BUCKET. Please set it in your .env file.")
+    
+    return bucket_name
 
 class S3FileLister:
-    def __init__(self, s3_bucket="deam-neptune", region="us-east-1"):
-        self.s3_bucket = s3_bucket
+    def __init__(self, s3_bucket=None, region="us-east-1"):
+        # Load .env file if s3_bucket is not provided
+        if s3_bucket is None:
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            env_path = find_dotenv(script_dir)
+            if env_path:
+                print(f"Using .env file at: {env_path}")
+                load_dotenv(env_path)
+                self.s3_bucket = validate_env_variables()
+            else:
+                print("Warning: .env file not found, using default bucket 'deam-neptune'")
+                self.s3_bucket = "deam-neptune"
+        else:
+            self.s3_bucket = s3_bucket
+            
         self.region = region
         
         # Initialize S3 client
@@ -149,8 +186,8 @@ class S3FileLister:
 def main():
     """Main function"""
     parser = argparse.ArgumentParser(description="List files in S3 bucket that would be processed by Neptune bulk loader")
-    parser.add_argument("--s3-bucket", default="deam-neptune", 
-                       help="S3 bucket name (default: deam-neptune)")
+    parser.add_argument("--s3-bucket", 
+                       help="S3 bucket name (will use S3_BUCKET from .env file if not provided)")
     parser.add_argument("--region", default="us-east-1", 
                        help="AWS region (default: us-east-1)")
     parser.add_argument("--extensions", nargs="+", default=[".csv"], 
@@ -175,7 +212,7 @@ def main():
     if not args.quiet:
         lister.print_summary(files, folder_structure, file_sizes)
     else:
-        print(f"Found {len(files)} files in {args.s3_bucket}")
+        print(f"Found {len(files)} files in {lister.s3_bucket}")
         total_size_mb = sum(file['size'] for file in files) / (1024 * 1024)
         print(f"Total size: {total_size_mb:.2f} MB")
     

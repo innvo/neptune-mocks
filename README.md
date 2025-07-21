@@ -1,9 +1,17 @@
-# Prerquistes
+# Prerequisites
 1. Install python dependencies
 ```
 pip install -r requirements.txt
 ```
-2. Install mermaid dependencies
+
+2. Configure environment variables
+```
+cp env.template .env
+```
+Edit the `.env` file and set your configuration values, particularly:
+- `S3_BUCKET`: Your S3 bucket name for Neptune data files
+
+3. Install mermaid dependencies
 ```
 
 ```
