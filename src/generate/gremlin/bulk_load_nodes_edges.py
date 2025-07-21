@@ -157,7 +157,8 @@ class ConcurrentLoadConfig:
     @classmethod
     def high_performance(cls) -> 'ConcurrentLoadConfig':
         """Create a high-performance configuration optimized for speed."""
-        config = cls()
+        # Start with environment-based config to get required variables
+        config = cls.from_env()
         # Override with high-performance settings
         config.queue_wait_time = 2  # Very fast queue processing
         config.max_retry_attempts = 1  # Minimal retries for speed
@@ -172,7 +173,8 @@ class ConcurrentLoadConfig:
     @classmethod
     def ultra_performance(cls) -> 'ConcurrentLoadConfig':
         """Create an ultra-performance configuration for maximum speed (use with caution)."""
-        config = cls()
+        # Start with environment-based config to get required variables
+        config = cls.from_env()
         # Override with ultra-performance settings
         config.queue_wait_time = 1  # Minimal wait time
         config.max_retry_attempts = 1  # Single retry attempt
@@ -764,7 +766,7 @@ def main():
             print("\nIf you don't have a .env file, copy env.template to .env and update the values.")
             sys.exit(1)
         
-        if not config.s3_bucket or config.s3_bucket == "deam-neptune":
+        if not config.s3_bucket:
             print(f"{Fore.RED}Error: S3_BUCKET environment variable is required{Style.RESET_ALL}")
             print("Please set this in your .env file:")
             print("Example: S3_BUCKET='your-s3-bucket-name'")
