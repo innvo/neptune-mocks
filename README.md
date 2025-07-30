@@ -21,7 +21,7 @@ python test_env_loading.py
 ```
 
 ```
-
+ssh  -L 8182:neptune-dev.cluster-cz7fmvtxsrei.us-east-1.neptune.amazonaws.com:8182 -i neptune-bastion-dev.pem ec2-user@35.170.107.253
 # Infrastructure
 1. Accessing AWS Neptune requires a SSH Tunnel
 2. AWS Neptune requires:
@@ -37,7 +37,7 @@ ssh  -L 8182:neptune-dev.cluster-cz7fmvtxsrei.us-east-1.neptune.amazonaws.com:81
 ```
 Neptune Serverless
 ```
-ssh  -L 8182:neptune-dev.cluster-cz7fmvtxsrei.us-east-1.neptune.amazonaws.com:8182 -i neptune-bastion-dev.pem ec2-user@35.170.107.253
+
 ```
 
 OpenSearch Serverkess
